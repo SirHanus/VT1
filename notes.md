@@ -13,7 +13,21 @@ Quick takeaway:
 
 Offline video processing:
 - Ultralytics YOLO Pose on hockey video (with_ultralytics.py) — processed data_hockey.mp4 offline using yolo11n-pose.pt; output saved to outputs/data_hockey_annotated.mp4.
-- YOLO Pose + SAM2 POC (ultralytics_video/sam_offline.py) — processes data_hockey.mp4; output ultralytics_video/outputs/data_hockey_sam_pose.mp4. Use --no-sam for pose-only (faster). Performance quite baad (7s/frame on GPU - 10* worse on cpu)
+- YOLO Pose + SAM2 POC (ultralytics_video/sam_offline.py) — processes data_hockey.mp4; output ultralytics_video/outputs/data_hockey_sam_pose.mp4. Use --no-sam for pose-only (faster).
+
+Efficiency/memory updates (sam_offline.py):
+- Faster + lighter:
+  - FP16 on CUDA (--half), cuDNN autotune, adjustable --imgsz/--conf.
+  - Throttle SAM: --sam-every N, limit boxes: --sam-topk K.
+- Avoid slowdown/memory creep for longer videos:
+  - Periodic SAM re-init (--sam-reinit N) + CUDA cache/GC (--empty-cache-interval) to reset memory; allows running larger/longer clips without stalling.
+  - Reduced capture buffering and in-place drawing to cut copies.
+- QoL:
+  - tqdm progress bar with proper totals (respects --max-frames).
+  - Auto-named outputs based on params when --out is omitted.
+
+Example longer-run (balanced):
+- `python .\sam_offline.py --half --sam-every 5 --sam-topk 3 --sam-reinit 60 --empty-cache-interval 25`
 
 
 ## Real-time processing tests
@@ -37,6 +51,6 @@ Offline video processing:
  - SAM separation
  - MediaPipe + Yolo
  - Dockerization?
-
-### 13/10
  - Minimal YOLO Pose + SAM2 POC on data_hockey.mp4
+ - Fixed SAM mask shape (squeeze to 2D) and added quick test runs
+ - Performance and memory reset options added (run larger videos reliably)
