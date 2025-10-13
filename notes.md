@@ -24,3 +24,10 @@ Offline video processing:
 - MediaPipe Tasks Pose Landmarker (multi-person, realtime) — `mediapipe_video/mp4_realtime_metrics.py`
   - Run from the `mediapipe_video` folder:
     - `python .\mp4_realtime_metrics.py --video ..\data_hockey.mp4 --model .\pose_landmarker_lite.task --num-poses 10`
+
+
+### 3/10
+ - Finetuning
+ - SAM separation
+ - MediaPipe + Yolo
+ - Dockerization?

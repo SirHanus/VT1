@@ -15,7 +15,7 @@ if not fps or fps <= 0 or fps > 240:
 model = YOLO("yolo11n-pose.pt")
 writer = None
 
-for res in model.predict(source=SRC, conf=0.25, stream=True):
+for res in model.predict(source=SRC, conf=0.1, stream=True):
     frame = res.plot()  # annotated BGR frame (numpy array)
     if writer is None:
         h, w = frame.shape[:2]
