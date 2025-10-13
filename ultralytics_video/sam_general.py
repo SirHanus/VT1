@@ -227,7 +227,20 @@ class SAM2VideoWrapper:
         result = {}
         for i, oid in enumerate(obj_ids):
             if i < masks.shape[0]:
-                result[int(oid)] = masks[i].detach().cpu().numpy().astype(np.uint8)
+                m = masks[i]
+                # Ensure 2D mask (H, W)
+                if hasattr(m, "detach"):
+                    m = m.detach().cpu().numpy()
+                else:
+                    m = np.asarray(m)
+                if m.ndim == 3:
+                    # common shape: (1, H, W)
+                    m = np.squeeze(m, axis=0)
+                if m.ndim != 2:
+                    # fallback: take last two dims
+                    m = m.reshape(m.shape[-2], m.shape[-1])
+                m = (m > 0).astype(np.uint8)
+                result[int(oid)] = m
         return result
 
 # --------------------------
