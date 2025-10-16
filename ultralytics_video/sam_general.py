@@ -378,40 +378,21 @@ def main():
         # SAM2 segmentation for current frame
         masks_by_id = sam2.segment_frame(frame, frame_idx)
 
-        # Visualization
-        vis = frame.copy()
-        overlay = vis.copy()
-        combined_foreground_mask = np.zeros((H, W), dtype=np.uint8)
-
+        # Visualization (match sam_offline: draw filled contours directly on the frame, no overlay blending/blur/labels)
+        vis = frame  # draw in-place like sam_offline
         for tid, mask in masks_by_id.items():
+            if mask is None:
+                continue
+            if mask.dtype != np.uint8:
+                mask = (mask > 0).astype(np.uint8)
             if mask.sum() == 0:
                 continue
             color = color_for_id(tid)
-            # fill
-            overlay[mask > 0] = color
-            combined_foreground_mask = np.maximum(combined_foreground_mask, mask)
-
-            # outline
             contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+            cv2.drawContours(vis, contours, -1, color, thickness=cv2.FILLED)
             cv2.drawContours(vis, contours, -1, color, thickness=2)
 
-            # label
-            # put label near top-left of bbox (from tracker if present)
-            tr = tracks.get(tid)
-            if tr:
-                x1, y1, x2, y2 = tr["bbox"]
-                draw_text(vis, f"ID {tid}", int(x1), max(20, int(y1) - 6), scale=0.6, color=(255, 255, 255))
-
-        # blend colored masks
-        vis = cv2.addWeighted(overlay, 0.35, vis, 0.65, 0)
-
-        # optional background blur (outside all masks)
-        if args.blur_bg and combined_foreground_mask.any():
-            blurred = cv2.GaussianBlur(frame, (25, 25), 0)
-            bg_mask = (combined_foreground_mask == 0)
-            vis[bg_mask] = blurred[bg_mask]
-
-        # HUD metrics
+        # HUD metrics (keep minimal info similar to offline if desired)
         dt = time.perf_counter() - t0
         dt_hist.append(dt)
         fps = nice_fps(dt_hist)

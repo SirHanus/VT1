@@ -15,10 +15,8 @@ from ultralytics import YOLO
 from tqdm import tqdm
 
 # Reuse SAM2 wrapper if available
-try:
-    from sam_general import SAM2VideoWrapper  # same folder
-except Exception:
-    SAM2VideoWrapper = None  # will gracefully disable SAM if import fails
+from sam_general import SAM2VideoWrapper  # same folder
+
 
 # COCO keypoint skeleton pairs (17-keypoint format)
 COCO_SKELETON: List[Tuple[int, int]] = [
@@ -47,12 +45,13 @@ def parse_args():
     root = Path(__file__).resolve().parents[1]
     ap = argparse.ArgumentParser("POC: YOLO pose + SAM2 segmentation on data_hockey.mp4 (optimized)")
     ap.add_argument("--source", type=str, default=str(root / "data_hockey.mp4"), help="Video source path")
-    ap.add_argument("--pose-model", type=str, default=str(root / "hockeypose_1" / "yolo11n-pose.pt"),
+    ap.add_argument("--pose-model", type=str, default=str(root / "hockeypose_1" / "yolo11x-pose.pt"),
                     help="Ultralytics YOLO pose model path/name")
     ap.add_argument("--sam2", type=str, default="facebook/sam2-hiera-large", help="HF SAM2 model id")
     ap.add_argument("--device", type=str, default="cuda", help="'cuda' or 'cpu'")
     ap.add_argument("--imgsz", type=int, default=640, help="YOLO inference size")
     ap.add_argument("--conf", type=float, default=0.25, help="YOLO confidence threshold")
+
     ap.add_argument("--out", type=str, default="", help="Output mp4 path (empty=auto name from params)")
     ap.add_argument("--max-frames", type=int, default=0, help="Process at most N frames (0 = all)")
     ap.add_argument("--show", action="store_true", help="Show a live window")

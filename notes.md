@@ -49,8 +49,7 @@ Example longer-run (balanced):
 ### 3/10
  - Finetuning
  - SAM separation
- - MediaPipe + Yolo
- - Dockerization?
+
+### 16/10
  - Minimal YOLO Pose + SAM2 POC on data_hockey.mp4
- - Fixed SAM mask shape (squeeze to 2D) and added quick test runs
  - Performance and memory reset options added (run larger videos reliably)
