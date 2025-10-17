@@ -60,7 +60,23 @@ Example longer-run (balanced):
  - Pass yolo poses into SAM2 for mask generation
  - Performance and memory reset options added (run larger videos reliably, try different model sizes)
  - batch run script
+ - logging and progress bars (saving in json)
 
 ### 30/10
  - Add unsupervised clustering (into teams)
  - Maybe add numner identification?
+ - Try to run it on bigger gpu and paralelize?
+
+
+## Batch processing (PowerShell)
+
+- Script: `process_all.ps1`
+- What it does:
+  - Recursively scans `videos_all` for all `*.mp4` files (including subfolders).
+  - Runs `ultralytics_video/sam_offline.py` on each video with flags: `--max-frames 800 --sam-every 1 --sam-reinit 70`.
+  - Writes processed videos to `videos_all_processed`, preserving the original subfolder structure.
+  - Saves per-video metrics as JSON next to each output `.mp4` and an aggregate `metrics_aggregate.json` in `videos_all_processed`.
+- Outputs:
+  - Videos: `videos_all_processed\<subfolders>\<filename>.mp4`
+  - Per-video metrics: `videos_all_processed\<subfolders>\<filename>.json`
+  - Aggregate metrics: `videos_all_processed\metrics_aggregate.json`

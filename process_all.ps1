@@ -28,12 +28,15 @@ if ($files.Count -eq 0) {
     exit 0
 }
 
+# Collect per-run metrics for aggregation
+$allMetrics = @()
+
 foreach ($f in $files) {
     $src = $f.FullName
 
     # Compute relative path under the input folder and build corresponding output directory
     $rel = $src.Substring($folderPath.Length)
-    if ($rel.StartsWith('\') -or $rel.StartsWith('/')) { $rel = $rel.TrimStart('\','/') }
+    if ($rel.StartsWith('\\') -or $rel.StartsWith('/')) { $rel = $rel.TrimStart('\\','/') }
 
     $relDir = Split-Path $rel -Parent
     if ([string]::IsNullOrEmpty($relDir)) {
@@ -47,12 +50,34 @@ foreach ($f in $files) {
         New-Item -ItemType Directory -Path $destDir -Force | Out-Null
     }
 
-    # Build output path: preserve filename but place in corresponding OutputFolder subdir
-    $out = Join-Path -Path $destDir -ChildPath $f.Name
+    # Build output paths
+    $outMp4 = Join-Path -Path $destDir -ChildPath $f.Name
+    $metricsJson = [System.IO.Path]::ChangeExtension($outMp4, ".json")
 
-    Write-Host "Processing: $src -> $out"
-    & $Python $Script --source $src --out $out --max-frames 700 --sam-every 1 --sam-reinit 60
+    Write-Host "Processing: $src -> $outMp4"
+    & $Python $Script --source $src --out $outMp4 --metrics-json $metricsJson --max-frames 800 --sam-every 1 --sam-reinit 70
     if ($LASTEXITCODE -ne 0) {
         Write-Host "Warning: processing failed for $src (exit code $LASTEXITCODE)"
     }
+
+    # Append metrics if present
+    if (Test-Path -LiteralPath $metricsJson) {
+        try {
+            $m = Get-Content -LiteralPath $metricsJson -Raw | ConvertFrom-Json
+            if ($m -ne $null) { $allMetrics += $m }
+        } catch {
+            Write-Host "Warning: failed to read metrics JSON for ${src}: $($_.Exception.Message)"
+        }
+    } else {
+        Write-Host "Note: metrics JSON not found for $src"
+    }
+}
+
+# Write aggregate metrics JSON
+$aggregatePath = Join-Path -Path $outputRoot -ChildPath "metrics_aggregate.json"
+try {
+    $allMetrics | ConvertTo-Json -Depth 8 | Out-File -FilePath $aggregatePath -Encoding utf8
+    Write-Host "Aggregate metrics written to: $aggregatePath"
+} catch {
+    Write-Host "Warning: failed to write aggregate metrics: $($_.Exception.Message)"
 }

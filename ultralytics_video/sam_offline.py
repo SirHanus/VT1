@@ -13,6 +13,8 @@ import numpy as np
 import torch
 from ultralytics import YOLO
 from tqdm import tqdm
+import json
+from datetime import datetime
 
 # Reuse SAM2 wrapper if available
 from sam_general import SAM2VideoWrapper  # same folder
@@ -63,6 +65,9 @@ def parse_args():
     ap.add_argument("--sam-topk", type=int, default=5, help="Limit SAM to top-K boxes per frame")
     ap.add_argument("--sam-reinit", type=int, default=0, help="Re-init SAM2 every N frames (0=never)")
     ap.add_argument("--empty-cache-interval", type=int, default=25, help="Call torch.cuda.empty_cache() every N frames on CUDA (0=never)")
+
+    # Metrics output
+    ap.add_argument("--metrics-json", type=str, default="", help="If set, write per-run metrics JSON to this path")
     return ap.parse_args()
 
 
@@ -180,6 +185,7 @@ def main():
     win_name = "SAM2 + YOLO Pose (q to quit)"
     frame_idx = 0
     t0_global = time.perf_counter()
+    sam_frames = 0  # count frames where SAM actually ran
 
     # Helper to maybe reinit SAM2 to prevent state growth
     def maybe_reinit_sam2():
@@ -258,6 +264,7 @@ def main():
                     contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
                     cv2.drawContours(vis, contours, -1, color, thickness=cv2.FILLED)
                     cv2.drawContours(vis, contours, -1, color, thickness=2)
+                sam_frames += 1
             except Exception as e:
                 print(f"[WARN] SAM2 frame error at {frame_idx}: {e}")
 
@@ -310,6 +317,40 @@ def main():
     if args.show:
         cv2.destroyAllWindows()
     dt = time.perf_counter() - t0_global
+
+    # Build per-run metrics and optionally write JSON
+    try:
+        metrics = {
+            "ts": datetime.utcnow().isoformat() + "Z",
+            "status": "ok",
+            "source": str(args.source),
+            "out": str(out_path),
+            "device": device,
+            "half": bool(args.half and device == "cuda"),
+            "imgsz": int(args.imgsz),
+            "conf": float(args.conf),
+            "sam_enabled": bool(not args.no_sam and (sam2 is not None)),
+            "sam_model": (str(args.sam2) if not args.no_sam else None),
+            "sam_every": int(args.sam_every),
+            "sam_topk": int(args.sam_topk),
+            "sam_reinit": int(args.sam_reinit),
+            "empty_cache_interval": int(args.empty_cache_interval),
+            "pose_model": str(args.pose_model),
+            "src_fps": float(src_fps),
+            "video_size": [int(W), int(H)],
+            "frames_processed": int(frame_idx),
+            "sam_frames": int(sam_frames),
+            "time_sec": float(dt),
+            "avg_fps": (float(frame_idx) / max(1e-6, float(dt))),
+        }
+        if args.metrics_json:
+            mpath = Path(args.metrics_json)
+            mpath.parent.mkdir(parents=True, exist_ok=True)
+            with mpath.open("w", encoding="utf-8") as f:
+                json.dump(metrics, f, ensure_ascii=False, indent=2)
+    except Exception as e:
+        print(f"[WARN] Failed to write metrics JSON: {e}")
+
     print(f"Saved: {out_path} | frames={frame_idx} | time={dt:.1f}s | fps~{frame_idx / max(1e-6, dt):.1f}")
     return 0
 
