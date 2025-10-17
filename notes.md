@@ -47,9 +47,20 @@ Example longer-run (balanced):
 
 
 ### 3/10
- - Finetuning
- - SAM separation
+ - Base demos with Camera input for:
+   - MediaPipe Pose
+   - OpenVINO MoveNet
+   - TRT Pose
+   - PyTorch Keypoint Baseline
+   - MMPose
+
 
 ### 16/10
- - Minimal YOLO Pose + SAM2 POC on data_hockey.mp4
- - Performance and memory reset options added (run larger videos reliably)
+ - Minimal YOLO Pose + SAM2 POC on data_hockey.mp4 (offline and online) 
+ - Pass yolo poses into SAM2 for mask generation
+ - Performance and memory reset options added (run larger videos reliably, try different model sizes)
+ - batch run script
+
+### 30/10
+ - Add unsupervised clustering (into teams)
+ - Maybe add numner identification?
