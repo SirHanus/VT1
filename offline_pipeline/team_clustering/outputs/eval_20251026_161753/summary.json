@@ -1,0 +1,8 @@
+{
+  "total_images": 0,
+  "total_detections": 0,
+  "label_counts": {},
+  "avg_margin": null,
+  "silhouette_umap": null,
+  "out_dir": "D:\\WORK\\VT1\\offline_pipeline\\team_clustering\\outputs\\eval_20251026_161753"
+}
