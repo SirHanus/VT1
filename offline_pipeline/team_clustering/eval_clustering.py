@@ -1,5 +1,5 @@
 # python
-"""
+r"""
 Evaluate team clustering models on images or sampled video frames.
 - Detect players with YOLO (person class)
 - Central-crop each detection
@@ -71,7 +71,8 @@ def parse_args() -> argparse.Namespace:
     ap = argparse.ArgumentParser("Evaluate team clustering models")
     src = ap.add_argument_group("Sources")
     src.add_argument("--images-dir", type=str, default="", help="Directory of test images")
-    src.add_argument("--glob", type=str, default="*.jpg;*.png;*.jpeg", help="Semicolon-separated patterns for images")
+    # include uppercase extensions by default as well
+    src.add_argument("--glob", type=str, default="*.jpg;*.png;*.jpeg;*.JPG;*.PNG;*.JPEG", help="Semicolon-separated patterns for images")
     src.add_argument("--video", type=str, default="", help="Optional: sample frames from a video file")
     src.add_argument("--frame-step", type=int, default=30, help="Take 1 frame every N frames when reading a video")
     src.add_argument("--max-frames", type=int, default=0, help="Stop after N frames sampled (0=all)")
@@ -146,7 +147,11 @@ class ClusterTester:
             self.yolo.to("cuda")
         if not _HAS_SIGLIP:
             raise RuntimeError("transformers SigLIP not available")
-        self.processor = AutoImageProcessor.from_pretrained(siglip_id)
+        # Prefer fast processor when available to silence slow-processor warnings
+        try:
+            self.processor = AutoImageProcessor.from_pretrained(siglip_id, use_fast=True)  # type: ignore
+        except TypeError:
+            self.processor = AutoImageProcessor.from_pretrained(siglip_id)
         self.siglip = SiglipVisionModel.from_pretrained(siglip_id)
         if device == "cuda":
             self.siglip.to("cuda")
@@ -283,6 +288,22 @@ def main() -> int:
     ts = time.strftime("%Y%m%d_%H%M%S")
     out_root = Path(args.out_dir) / f"eval_{ts}"
     ensure_dir(out_root)
+    print(f"[INFO] Output folder: {out_root}")
+
+    # helper: robust save with fallback and logging
+    def save_annotated(img: np.ndarray, path: Path) -> None:
+        ok = cv2.imwrite(str(path), img)
+        if not ok:
+            # try PNG fallback
+            alt = path.with_suffix(".png")
+            ok2 = cv2.imwrite(str(alt), img)
+            if ok2:
+                print(f"[WARN] Failed to write {path.name}, saved as {alt.name} instead")
+            else:
+                print(f"[ERROR] Failed to write annotated image: {path}")
+        else:
+            # optional: verbose listing
+            pass
 
     # Load tester
     try:
@@ -292,21 +313,29 @@ def main() -> int:
         print(f"[ERROR] Failed to init models: {e}")
         return 1
 
+    saved_count = 0
+
     # Collect inputs
     annotated_images: List[np.ndarray] = []
     per_image_stats: List[Dict[str, Any]] = []
 
     # From images dir
     img_paths = read_images(args.images_dir, args.glob) if args.images_dir else []
+    if args.images_dir:
+        print(f"[INFO] Images dir set: {args.images_dir} | patterns: {args.glob} | matched: {len(img_paths)} file(s)")
+    if args.images_dir and not img_paths:
+        print(f"[WARN] No images matched in {args.images_dir} for patterns: {args.glob}")
     for p in img_paths:
         img = cv2.imread(str(p))
         if img is None:
+            print(f"[WARN] Could not read image: {p}")
             continue
         ann, boxes, labels, margins = tester.predict_labels_on_image(img, imgsz=args.imgsz, conf_thr=args.conf,
                                                                      max_boxes=args.max_boxes, central_ratio=args.central_ratio)
         # Save annotated
         out_path = out_root / f"{p.stem}_ann.jpg"
-        cv2.imwrite(str(out_path), ann)
+        save_annotated(ann, out_path)
+        saved_count += 1
         annotated_images.append(ann)
         per_image_stats.append({
             "source": str(p),
@@ -323,12 +352,18 @@ def main() -> int:
 
     # From video frames
     if args.video:
+        video_abs = str(Path(args.video).resolve())
+        print(f"[INFO] Sampling video: {video_abs} | frame-step={int(args.frame_step)} | max-frames={int(args.max_frames)}")
         frames = sample_video_frames(args.video, frame_step=int(args.frame_step), max_frames=int(args.max_frames))
+        print(f"[INFO] Sampled {len(frames)} frame(s) from video")
+        if not frames:
+            print(f"[WARN] No frames sampled from video: {args.video}")
         for i, fr in enumerate(frames):
             ann, boxes, labels, margins = tester.predict_labels_on_image(fr, imgsz=args.imgsz, conf_thr=args.conf,
                                                                          max_boxes=args.max_boxes, central_ratio=args.central_ratio)
             out_path = out_root / f"video_{i:05d}_ann.jpg"
-            cv2.imwrite(str(out_path), ann)
+            save_annotated(ann, out_path)
+            saved_count += 1
             annotated_images.append(ann)
             per_image_stats.append({
                 "source": f"{args.video}#frame{i}",
@@ -362,19 +397,8 @@ def main() -> int:
     for lab in all_labels:
         counts[lab] = counts.get(lab, 0) + 1
 
-    # Try silhouette on the reduced space if we can reconstruct Z
+    # Try silhouette placeholder (see note)
     silhouette = None
-    try:
-        from sklearn.metrics import silhouette_score
-        # Recompute reduced Z for all crops by re-running detection/embedding is expensive.
-        # Instead, approximate using the per-image crops processed above by storing Z during prediction.
-        # For simplicity, skip unless we have at least 2 clusters present with >1 samples each.
-        uniq = set(all_labels)
-        if len(uniq) >= 2 and len(all_labels) >= 10:
-            # Not computing here to avoid heavy recomputation; mark as N/A for small evals.
-            silhouette = None
-    except Exception:
-        silhouette = None
 
     # Grid mosaic
     if args.save_grid and annotated_images:
@@ -387,17 +411,19 @@ def main() -> int:
         "total_detections": int(sum(s.get("num_boxes", 0) for s in per_image_stats)),
         "label_counts": {int(k): int(v) for k, v in sorted(counts.items())},
         "avg_margin": (float(np.mean(all_margins)) if all_margins else None),
-        "silhouette_umap": silhouette,  # may be None if not computed
+        "silhouette_umap": silhouette,  # not computed here to keep eval fast
         "out_dir": str(out_root),
+        "saved_files": int(saved_count),
     }
     with (out_root / "summary.json").open("w", encoding="utf-8") as f:
         json.dump(summary, f, ensure_ascii=False, indent=2)
 
-    print(f"Eval done. Wrote annotated images to: {out_root}")
+    print(f"[INFO] Saved {saved_count} annotated image(s) to: {out_root}")
+    if saved_count == 0:
+        print("[HINT] No images saved. Check that --images-dir or --video is set, patterns match files, and YOLO detected frames were read.")
     print(json.dumps(summary, indent=2))
     return 0
 
 
 if __name__ == "__main__":
     raise SystemExit(main())
-

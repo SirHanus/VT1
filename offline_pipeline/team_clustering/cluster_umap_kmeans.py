@@ -50,6 +50,8 @@ def parse_args() -> argparse.Namespace:
     ap.add_argument("--umap-dim", type=int, default=16, help="UMAP output dimensionality")
     ap.add_argument("--umap-neighbors", type=int, default=15, help="UMAP n_neighbors")
     ap.add_argument("--umap-metric", type=str, default="cosine", help="UMAP distance metric")
+    ap.add_argument("--umap-min-dist", type=float, default=0.1, help="UMAP min_dist (lower=more compact clusters)")
+    ap.add_argument("--reuse-umap", type=str, default="", help="Path to a pre-trained umap.pkl to reuse (skip fitting)")
 
     ap.add_argument("--limit", type=int, default=0, help="Limit N total rows (0=all)")
     ap.add_argument("--plot", action="store_true", help="Save a 2D scatter plot if umap-dim>=2 and matplotlib available")
@@ -101,12 +103,13 @@ def load_training_set(in_root: Path) -> Tuple[np.ndarray, List[List[str]]]:
     return E, rows
 
 
-def run_umap(E: np.ndarray, dim: int, metric: str, neighbors: int, seed: int):
+def run_umap(E: np.ndarray, dim: int, metric: str, neighbors: int, seed: int, min_dist: float):
     try:
         import umap.umap_ as umap
     except Exception as e:
         raise RuntimeError("umap-learn is not installed. pip install umap-learn") from e
-    reducer = umap.UMAP(n_components=int(dim), n_neighbors=int(neighbors), metric=metric, random_state=seed)
+    reducer = umap.UMAP(n_components=int(dim), n_neighbors=int(neighbors), metric=metric,
+                        min_dist=float(min_dist), random_state=seed)
     Z = reducer.fit_transform(E)
     return Z, reducer
 
@@ -155,8 +158,22 @@ def main() -> int:
         writer = csv.writer(f)
         writer.writerows(rows)
 
-    # UMAP
-    Z, reducer = run_umap(E, dim=args.umap_dim, metric=args.umap_metric, neighbors=args.umap_neighbors, seed=args.seed)
+    # UMAP: reuse if provided, else fit
+    reducer = None
+    Z = None
+    if args.reuse_umap:
+        try:
+            import joblib
+            reducer = joblib.load(args.reuse_umap)
+            Z = reducer.transform(E)
+        except Exception as e:
+            print(f"[WARN] Failed to reuse UMAP from {args.reuse_umap}: {e}. Fitting a new one instead.")
+            Z, reducer = run_umap(E, dim=args.umap_dim, metric=args.umap_metric, neighbors=args.umap_neighbors,
+                                   seed=args.seed, min_dist=args.umap_min_dist)
+    else:
+        Z, reducer = run_umap(E, dim=args.umap_dim, metric=args.umap_metric, neighbors=args.umap_neighbors,
+                               seed=args.seed, min_dist=args.umap_min_dist)
+
     np.save(out_root / f"umap_{args.umap_dim}.npy", Z)
 
     # KMeans
@@ -167,9 +184,11 @@ def main() -> int:
     if args.save_models:
         try:
             import joblib
-            joblib.dump(reducer, out_root / "umap.pkl")
-            # Recreate KMeans object to capture fitted state; run_kmeans constructed km internally,
-            # but we can refit here to have the object.
+            if args.reuse_umap:
+                # Only save KMeans when reusing a global reducer
+                joblib.dump(reducer, out_root / "umap.pkl") if reducer is not None and not args.reuse_umap else None
+            else:
+                joblib.dump(reducer, out_root / "umap.pkl")
             from sklearn.cluster import KMeans
             km = KMeans(n_clusters=int(args.k), n_init=10, random_state=args.seed)
             km.fit(Z)
@@ -195,6 +214,8 @@ def main() -> int:
         "k": int(args.k),
         "counts": {int(k): int(v) for k, v in zip(uniq.tolist(), cnts.tolist())},
         "kmeans": km_info,
+        "umap_min_dist": float(args.umap_min_dist),
+        "reuse_umap": (str(args.reuse_umap) if args.reuse_umap else None),
     }
     with (out_root / "summary.json").open("w", encoding="utf-8") as f:
         json.dump(summary, f, ensure_ascii=False, indent=2)

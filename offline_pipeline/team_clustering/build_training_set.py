@@ -75,8 +75,10 @@ def parse_args() -> argparse.Namespace:
     ap.add_argument("--device", type=str, default="cuda", choices=["cuda", "cpu"], help="Inference device")
 
     # Outputs
-    ap.add_argument("--out-dir", type=str, default=str(root / "videos_all_processed" / "training_set"),
-                    help="Output directory root")
+    # Default to team_clustering/clustering alongside this script (per new structure)
+    local_base = Path(__file__).resolve().parent
+    ap.add_argument("--out-dir", type=str, default=str(local_base / "clustering"),
+                    help="Output directory root (default: team_clustering/clustering)")
     ap.add_argument("--save-crops", action="store_true", help="Save crop images to disk")
 
     # Misc
