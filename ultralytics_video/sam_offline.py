@@ -221,7 +221,6 @@ def main():
                 verbose=False,
             )[0]
 
-        # Gather detections and keypoints
         boxes = []  # list of [x1,y1,x2,y2]
         kpts = None  # (N, K, 3)
         if res.boxes is not None and len(res.boxes) > 0:
@@ -260,7 +259,7 @@ def main():
                     if mask.sum() == 0:
                         continue
                     color = color_for_id(int(oid))
-                    # draw filled contours directly (avoids full-frame copy)
+                    # draw filled contours directly
                     contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
                     cv2.drawContours(vis, contours, -1, color, thickness=cv2.FILLED)
                     cv2.drawContours(vis, contours, -1, color, thickness=2)

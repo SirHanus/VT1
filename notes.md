@@ -64,9 +64,8 @@ Example longer-run (balanced):
 
 ### 30/10
  - Add unsupervised clustering (into teams)
- - Maybe add numner identification?
- - Try to run it on bigger gpu and paralelize?
-
+ - Maybe add number identification? connect with skeleton
+ - Try to run it on bigger gpu and parallelize?
 
 ## Batch processing (PowerShell)
 
