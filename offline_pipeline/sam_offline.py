@@ -187,7 +187,9 @@ def _build_out_path(args) -> Path:
     stem = stem.replace(" ", "_")
     conf_pct = int(round(args.conf * 100))
     sam_enabled = not args.no_sam
-    tokens = [stem, "pose"]
+    # Add date as first token
+    date_str = datetime.now().strftime("%Y%m%d")
+    tokens = [date_str, stem, "pose"]
     if sam_enabled:
         tokens.append("sam")
     tokens.append(args.device)
@@ -383,7 +385,8 @@ def main():
                 obj_ids = list(range(len(boxes)))
                 sam2.add_box_prompts(vis, frame_idx, obj_ids=obj_ids, boxes_xyxy=boxes)
                 masks_by_id = sam2.segment_frame(vis, frame_idx)
-                # Overlay masks with minimal allocations
+                # Overlay masks with transparency
+                overlay = vis.copy()
                 for oid, mask in masks_by_id.items():
                     if mask is None:
                         continue
@@ -392,9 +395,14 @@ def main():
                     if mask.sum() == 0:
                         continue
                     color = color_for_team(team_labels[oid] if (team_labels and oid < len(team_labels)) else -1)
+                    # Fill the mask area with team color on overlay
+                    overlay[mask > 0] = color
+                    # Draw contour outline
                     contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-                    cv2.drawContours(vis, contours, -1, color, thickness=cv2.FILLED)
                     cv2.drawContours(vis, contours, -1, color, thickness=2)
+                # Blend overlay with original frame (alpha=0.4 means 40% color, 60% original)
+                alpha = 0.25
+                cv2.addWeighted(overlay, alpha, vis, 1 - alpha, 0, vis)
                 sam_frames += 1
             except Exception as e:
                 print(f"[WARN] SAM2 frame error at {frame_idx}: {e}")
