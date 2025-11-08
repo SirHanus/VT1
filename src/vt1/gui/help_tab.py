@@ -14,37 +14,35 @@ class HelpTab(QtWidgets.QWidget):
         lay.addWidget(self.viewer, 1)
         self._load_readme_into_viewer()
 
-    def _find_readme(self) -> Optional[Path]:
-        # Walk up from this file to repo root, look for README.md
-        p = Path(__file__).resolve()
-        for parent in [p.parent, *p.parents]:
-            cand = parent.parent.parent / 'README.md' if parent.name == 'gui' else parent / 'README.md'
-            # The above ensures we also check repo root if we're at src/vt1/gui
-            if cand.exists():
-                return cand
-        return None
+    def _find_docs(self) -> tuple[Optional[Path], Optional[Path]]:
+        root = Path(__file__).resolve().parents[2]
+        gui_md = root / 'GUI.md'
+        readme = root / 'README.md'
+        return (gui_md if gui_md.exists() else None, readme if readme.exists() else None)
 
     def _load_readme_into_viewer(self):
-        readme = self._find_readme()
-        if not readme:
-            self.viewer.setPlainText("README.md not found. Please keep README.md at the repository root.")
+        gui_md, readme = self._find_docs()
+        target = gui_md or readme
+        if not target:
+            self.viewer.setPlainText("GUI.md/README.md not found. Keep docs at repo root.")
             return
         try:
-            text = readme.read_text(encoding='utf-8')
+            text = target.read_text(encoding='utf-8')
         except Exception:
             try:
-                text = readme.read_text(errors='ignore')
+                text = target.read_text(errors='ignore')
             except Exception:
-                self.viewer.setPlainText(f"Failed to read {readme}")
+                self.viewer.setPlainText(f"Failed to read {target}")
                 return
-        # Preferred: render with Qt's built-in Markdown support
+        # If showing GUI.md and README also exists, append backlink.
+        if gui_md and target == gui_md and readme:
+            text += "\n\n---\nBack to project overview: see README.md"
         try:
             self.viewer.setMarkdown(text)
             return
         except Exception:
             pass
-        # Fallback: render via python-markdown if available
-        html: Optional[str] = None
+        html = None
         try:
             import markdown  # type: ignore
             html = markdown.markdown(text, extensions=['fenced_code', 'tables'])
@@ -59,6 +57,7 @@ class HelpTab(QtWidgets.QWidget):
             pre {{ background:#f7f7f7; padding:8px; border-radius:4px; overflow-x:auto; }}
             code {{ background:#f2f2f2; padding:1px 3px; border-radius:3px; }}
             h1, h2, h3 {{ margin-top: 0.8em; }}
+            a {{ color:#2a64ad; text-decoration:none; }} a:hover {{ text-decoration:underline; }}
             </style></head><body>{html}</body></html>
             """
             self.viewer.setHtml(styled)

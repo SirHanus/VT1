@@ -2,7 +2,7 @@ name: build-windows-exe
 
 on:
   push:
-    branches: [ main]
+    branches: [ main ]
     tags: [ 'v*' ]
   pull_request:
     branches: [ main ]
@@ -12,6 +12,9 @@ jobs:
   build-windows:
     runs-on: windows-latest
     timeout-minutes: 45
+    env:
+      PYINSTALLER_NO_UPX: '1'  # ensure no UPX compression
+      QT_QPA_PLATFORM: offscreen  # avoid GUI needing a display when smoke testing (if added later)
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -22,54 +25,92 @@ jobs:
           python-version: '3.12'
           cache: 'pip'
 
+      - name: Cache build artifacts (pyinstaller cache / pip)
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~\AppData\Local\pip\Cache
+            ~\AppData\Local\pyinstaller
+          key: pyinst-${{ runner.os }}-${{ hashFiles('pyproject.toml', 'requirements.txt') }}
+          restore-keys: |
+            pyinst-${{ runner.os }}-
+
       - name: Show environment
+        shell: cmd
         run: |
           python -V
           echo PYTHONPATH=%PYTHONPATH%
 
       - name: Install project (with build extras)
+        shell: cmd
         run: |
-          pip install -U pip
+          pip install -U pip wheel
+          pip install "pyinstaller==6.11.*" pyinstaller-hooks-contrib
           pip install .[build]
           pip list
 
-      - name: Build executables via PyInstaller (direct)
+      - name: Build executables (onedir + onefile; no strip)
+        shell: cmd
         run: |
-          python -m PyInstaller --noconfirm --onefile ^
+          REM Pipeline (onedir)
+          pyinstaller --clean --noconfirm --onedir ^
             --name vt1-pipeline ^
             --paths src ^
             --hidden-import vt1.pipeline.sam_general ^
             --hidden-import vt1.pipeline.sam_offline ^
-            -s ^
             src\vt1\pipeline\sam_offline.py
-          python -m PyInstaller --noconfirm --onefile ^
+          REM Pipeline (onefile)
+          pyinstaller --clean --noconfirm --onefile ^
+            --name vt1-pipeline-onefile ^
+            --paths src ^
+            --hidden-import vt1.pipeline.sam_general ^
+            --hidden-import vt1.pipeline.sam_offline ^
+            src\vt1\pipeline\sam_offline.py
+          REM GUI (onedir)
+          pyinstaller --clean --noconfirm --onedir ^
             --name vt1-gui ^
             --paths src ^
             --hidden-import vt1.gui.pipeline_tab ^
             --hidden-import vt1.gui.clustering_tab ^
             --hidden-import vt1.gui.help_tab ^
-            -w ^
-            -s ^
+            --windowed ^
             src\vt1\gui\main.py
-        shell: cmd
+          REM GUI (onefile)
+          pyinstaller --clean --noconfirm --onefile ^
+            --name vt1-gui-onefile ^
+            --paths src ^
+            --hidden-import vt1.gui.pipeline_tab ^
+            --hidden-import vt1.gui.clustering_tab ^
+            --hidden-import vt1.gui.help_tab ^
+            --windowed ^
+            src\vt1\gui\main.py
 
       - name: List dist contents
-        run: dir dist
         shell: cmd
+        run: dir dist
 
-      - name: Upload executables
+      - name: Smoke test pipeline executables (CPU, few frames)
+        shell: cmd
+        run: |
+          echo Running onefile pipeline smoke test
+          dist\vt1-pipeline-onefile.exe --source data_hockey.mp4 --device cpu --max-frames 5 --no-sam || exit /b 1
+          echo Running onedir pipeline smoke test
+          dist\vt1-pipeline\vt1-pipeline.exe --source data_hockey.mp4 --device cpu --max-frames 5 --no-sam || exit /b 1
+
+      - name: Upload artifacts (executables and onedir folders)
         uses: actions/upload-artifact@v4
         with:
-          name: vt1-windows-exe
+          name: vt1-windows-executables
           path: |
-            dist/vt1-pipeline.exe
-            dist/vt1-gui.exe
+            dist/vt1-pipeline-onefile.exe
+            dist/vt1-gui-onefile.exe
+            dist/vt1-pipeline/**
+            dist/vt1-gui/**
 
       - name: Upload build logs (optional)
         if: always()
         uses: actions/upload-artifact@v4
         with:
-            name: pyinstaller-build-logs
-            path: build/**
-            if-no-files-found: ignore
-
+          name: pyinstaller-build-logs
+          path: build/**
+          if-no-files-found: ignore
