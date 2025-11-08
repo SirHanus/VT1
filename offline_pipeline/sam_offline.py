@@ -156,22 +156,18 @@ def parse_args():
     ap.add_argument("--imgsz", type=int, default=640, help="YOLO inference size")
     ap.add_argument("--conf", type=float, default=0.25, help="YOLO confidence threshold")
 
-    ap.add_argument("--out", type=str, default="", help="Output mp4 path (empty=auto name from params)")
     ap.add_argument("--max-frames", type=int, default=0, help="Process at most N frames (0 = all)")
     ap.add_argument("--show", action="store_true", help="Show a live window")
     ap.add_argument("--no-sam", action="store_true", help="Disable SAM and only draw pose (faster)")
 
-    # Performance/memory controls
     ap.add_argument("--half", action="store_true", help="Use FP16 for YOLO on CUDA")
     ap.add_argument("--sam-every", type=int, default=1, help="Run SAM every N frames (1=every frame)")
-    ap.add_argument("--sam-topk", type=int, default=5, help="Limit SAM to top-K boxes per frame")
-    ap.add_argument("--sam-reinit", type=int, default=0, help="Re-init SAM2 every N frames (0=never)")
+    ap.add_argument("--sam-topk", type=int, default=10, help="Limit SAM to top-K boxes per frame")
+    ap.add_argument("--sam-reinit", type=int, default=60, help="Re-init SAM2 every N frames (0=never)")
     ap.add_argument("--empty-cache-interval", type=int, default=25, help="Call torch.cuda.empty_cache() every N frames on CUDA (0=never)")
 
-    # Metrics output
     ap.add_argument("--metrics-json", type=str, default="", help="If set, write per-run metrics JSON to this path")
 
-    # Team clustering inference options
     ap.add_argument("--team-models", type=str, default=str(root / "offline_pipeline" / "team_clustering" / "clustering"),
                     help="Directory containing umap.pkl and kmeans.pkl")
     ap.add_argument("--siglip", type=str, default="google/siglip-base-patch16-224", help="SigLIP model id (vision)")
@@ -276,7 +272,8 @@ def main():
         sam2 = init_sam2(args.sam2, device=device, prefer_half=(args.half and device == "cuda"))
 
     # Prepare writer
-    out_path = Path(args.out) if args.out else _build_out_path(args)
+    # Always auto-generate output path now (previously respected --out)
+    out_path = _build_out_path(args)
     out_path.parent.mkdir(parents=True, exist_ok=True)
 
     # Probe first frame to get size
@@ -332,9 +329,12 @@ def main():
         if not ok:
             break
 
+
+        #
+
         # YOLO pose inference
         with torch.inference_mode():
-            # Use explicit device for clarity
+
             res = pose_model.predict(
                 frame,
                 imgsz=args.imgsz,
@@ -468,7 +468,7 @@ def main():
             "ts": datetime.utcnow().isoformat() + "Z",
             "status": "ok",
             "source": str(args.source),
-            "out": str(out_path),
+            "out": str(out_path),  # Auto-generated
             "device": device,
             "half": bool(args.half and device == "cuda"),
             "imgsz": int(args.imgsz),

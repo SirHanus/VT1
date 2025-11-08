@@ -177,12 +177,16 @@ python offline_pipeline\team_clustering\eval_clustering.py ^
 - Starting writing the paper (some chapter split etc.)
 - Combine the clustering with the offline-pipeline (maybe still do it online based on the perf.)
 
-### 29/10 (Current)
-- **Consolidated offline_pipeline/** - All processing scripts moved to single location
-- **Team clustering integrated** - Full workflow from training to inference
-- **Per-match model training** - Build custom clustering models per game
+### 31/10 (Current)
+- **Team clustering integrated** - Full workflow from data generation, training to inference
+- **Per-match model training** - Build custom clustering models per game (needed so far)
 - **Evaluation tools** - Visual validation of team separation quality
-- **Updated documentation** - Comprehensive usage guides
+- *FUTURE:*
+  - Finetune yolo model? Make dataset and improve it. (Yolo performance currently affect other parts too)
+  - Still paralelization?
+  - Boundry for the playing field (cut the background)
+  - Dataset finetuning - Take whole perspective and see peroformance (topic for discussion)
+  - Make it more user friendly (gui etc.)
 
 ## Batch Processing (PowerShell)
 
