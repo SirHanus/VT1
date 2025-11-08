@@ -211,8 +211,11 @@ def main() -> int:
     if args.save_models:
         try:
             import joblib
-            models_dir = Path(args.models_dir)
+            models_dir = Path(args.models_dir).resolve()
+            out_root_res = out_root.resolve()
             ensure_dir(models_dir)
+            if models_dir == out_root_res:
+                print(f"[WARN] models-dir ({models_dir}) == out-dir ({out_root_res}); recommended to separate models from clustering outputs.")
             # Save UMAP reducer
             if reducer is not None:
                 saved_umap = models_dir / "umap.pkl"
@@ -220,7 +223,8 @@ def main() -> int:
             # Save KMeans model
             saved_kmeans = models_dir / "kmeans.pkl"
             joblib.dump(km_model, saved_kmeans)
-            print(f"[INFO] Saved models to: {models_dir}")
+            print(f"[INFO] Saved UMAP -> {saved_umap if saved_umap else 'N/A'}")
+            print(f"[INFO] Saved KMeans -> {saved_kmeans if saved_kmeans else 'N/A'}")
         except Exception as e:
             print(f"[WARN] Failed to save models: {e}")
     else:
@@ -273,6 +277,10 @@ def main() -> int:
     print(f"Clustering complete. Output in: {out_root}")
     if args.save_models:
         print(f"Models available at: {Path(args.models_dir).resolve()}")
+        if saved_umap:
+            print(f"  UMAP:   {saved_umap}")
+        if saved_kmeans:
+            print(f"  KMeans: {saved_kmeans}")
     return 0
 
 
