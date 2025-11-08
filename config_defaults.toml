@@ -1,0 +1,11 @@
+# Default configuration for VT1 (edit config_local.toml to override)
+models_dir = "models"
+pose_model = "models/yolo11x-pose.pt"
+yolo_model = "models/yolo11n.pt"
+team_models_dir = "models/team_clustering"
+# Root-level outputs folder
+pipeline_output_dir = "outputs"
+# Separate output subtree for team clustering utilities
+team_output_dir = "outputs/team_clustering"
+log_level = "INFO"
+
