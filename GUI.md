@@ -2,6 +2,34 @@
 
 This document provides detailed usage instructions for the PyQt6 GUI. For a high-level overview and CLI examples see `README.md`.
 
+## First Run: Quick Start Workflow
+
+On first launch (when team models don't exist), VT1 shows a **startup dialog** with the option to run the complete training workflow automatically:
+
+1. **Build training set** - Extracts player crops and embeddings from videos
+2. **Cluster** - Creates team classification models (UMAP + KMeans)
+3. **Run pipeline demo** - Processes first video with team coloring enabled
+
+**Requirements:**
+- Training videos must exist in the configured directory (default: `videos_all/CAR_vs_NYR`)
+- Videos should match the glob pattern (default: `*.mp4`)
+
+**What happens:**
+- The GUI runs `build_training_set` → `cluster_umap_kmeans` → `sam_offline` with all config defaults
+- Models are saved to `models/team_clustering/` (configurable)
+- Demo video (300 frames) saved to `outputs/` showing team coloring in action
+- Progress is shown with live logs
+- Takes 5-30 minutes depending on dataset size and hardware
+
+**Options:**
+- **Run Training Workflow** - Automatic setup (recommended for first-time users)
+- **Skip** - Configure manually using Team Clustering tabs
+- **Exit** - Close the application
+
+After completion, you can immediately use the Pipeline tab with team coloring enabled.
+
+---
+
 ## Tabs Overview
 1. Pipeline
 2. Team Clustering (Build Set, Cluster, Audit, Evaluate sub-tabs)

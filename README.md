@@ -19,7 +19,7 @@ python -m vt1.pipeline.sam_offline --source data_hockey.mp4 --device cuda
 
 ## Configuration (Single Source of Truth)
 All defaults live in `config_defaults.toml` and can be overridden by:
-1. `config_local.toml` (not committed)
+1. `config_local.toml` 
 2. Environment variables `VT1_*` (highest precedence)
 
 Example override (Windows CMD):

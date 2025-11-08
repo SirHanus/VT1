@@ -33,8 +33,15 @@ umap_neighbors = 15                                # UMAP n_neighbors; lower = m
 umap_metric = "cosine"                            # UMAP distance metric; cosine works well for normalized embeddings like SigLIP
 umap_min_dist = 0.1                                # UMAP min_dist; lower packs clusters tighter (can improve separation but may overfit)
 random_seed = 0                                    # Global seed for reproducible sampling and clustering; change to get different cluster initializations
+save_models_default = true                         # Whether to persist UMAP/KMeans models by default during clustering; true recommended for pipeline use
 
 # Evaluation defaults
 eval_frame_step = 30                               # Sample one frame every N frames when evaluating on videos; lower = more frames, slower
 eval_limit_images = 50                             # Max number of annotated images to save per eval run; prevents dumping too many files
 yolo_max_boxes = 8                                 # Max boxes to annotate per image/frame in eval; limits clutter and speeds up drawing
+
+# Pipeline SAM2 defaults
+sam_every = 1                                      # Run SAM segmentation every N frames; higher = faster but less smooth masks
+sam_topk = 10                                      # Limit SAM to top-K detection boxes per frame; lower = faster SAM processing
+sam_reinit = 60                                    # Re-initialize SAM2 state every N frames to prevent drift (0=never); helps with long videos
+empty_cache_interval = 25                          # Call torch.cuda.empty_cache() every N frames on CUDA (0=never); reduces memory fragmentation

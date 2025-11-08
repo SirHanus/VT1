@@ -1,7 +1,9 @@
 from __future__ import annotations
 from typing import Optional
 from pathlib import Path
+import sys
 from PyQt6 import QtWidgets
+
 
 class HelpTab(QtWidgets.QWidget):
     def __init__(self, parent: Optional[QtWidgets.QWidget] = None):
@@ -15,7 +17,31 @@ class HelpTab(QtWidgets.QWidget):
         self._load_readme_into_viewer()
 
     def _find_docs(self) -> tuple[Optional[Path], Optional[Path]]:
-        root = Path(__file__).resolve().parents[2]
+        # Try to find docs in multiple locations:
+        # 1. Bundled with PyInstaller (_MEIPASS)
+        # 2. Development repo root (pyproject.toml marker)
+        # 3. Relative to executable
+
+        # Check if running as PyInstaller bundle
+        if getattr(sys, 'frozen', False) and hasattr(sys, '_MEIPASS'):
+            # Running in PyInstaller bundle
+            bundle_dir = Path(sys._MEIPASS)
+            gui_md = bundle_dir / 'GUI.md'
+            readme = bundle_dir / 'README.md'
+            return (gui_md if gui_md.exists() else None, readme if readme.exists() else None)
+
+        # Development mode: find repo root by looking for pyproject.toml
+        current = Path(__file__).resolve()
+        root = None
+        for parent in [current] + list(current.parents):
+            if (parent / 'pyproject.toml').exists():
+                root = parent
+                break
+
+        if root is None:
+            # Fallback: assume parents[2] (works in some cases)
+            root = Path(__file__).resolve().parents[2]
+
         gui_md = root / 'GUI.md'
         readme = root / 'README.md'
         return (gui_md if gui_md.exists() else None, readme if readme.exists() else None)
@@ -26,6 +52,11 @@ class HelpTab(QtWidgets.QWidget):
         if not target:
             self.viewer.setPlainText("GUI.md/README.md not found. Keep docs at repo root.")
             return
+
+        # Set search paths so relative links work
+        if target:
+            self.viewer.setSearchPaths([str(target.parent)])
+
         try:
             text = target.read_text(encoding='utf-8')
         except Exception:

@@ -20,38 +20,50 @@ if exist build rmdir /s /q build
 
 REM ---------------- Pipeline CLI executable ----------------
 REM Console application (keep stdout); --paths must include project src directory
+echo.
+echo [INFO] Building Pipeline executable (console mode)...
 %PYEXE% -m PyInstaller --noconfirm --onefile ^
   --name vt1-pipeline ^
   --paths "%~dp0..\src" ^
+  --additional-hooks-dir "%~dp0..\hooks" ^
+  --runtime-hook "%~dp0..\hooks\rthook_suppress_torch_warnings.py" ^
   --hidden-import vt1.pipeline.sam_general ^
   --hidden-import vt1.pipeline.sam_offline ^
-  -s ^
+  --noupx ^
   src\vt1\pipeline\sam_offline.py
 
 if errorlevel 1 (
-  echo [ERROR] Pipeline build failed
+  echo [ERROR] Pipeline build failed with exit code %ERRORLEVEL%
   exit /b 1
 ) else (
-  echo [INFO] Pipeline exe built
+  echo [SUCCESS] Pipeline exe built successfully
 )
 
 REM ---------------- GUI executable ----------------
 REM Windowed application (no console); include hidden imports for tabs
+echo.
+echo [INFO] Building GUI executable (windowed mode)...
 %PYEXE% -m PyInstaller --noconfirm --onefile ^
-  --name vt1-gui ^
+  --additional-hooks-dir "%~dp0..\hooks" ^
+  --additional-hooks-dir "%~dp0..\hooks" ^
+  --runtime-hook "%~dp0..\hooks\rthook_suppress_torch_warnings.py" ^
   --paths "%~dp0..\src" ^
   --hidden-import vt1.gui.pipeline_tab ^
   --hidden-import vt1.gui.clustering_tab ^
   --hidden-import vt1.gui.help_tab ^
-  -w ^
-  -s ^
+  --hidden-import vt1.gui.startup_dialog ^
+  --add-data "%~dp0..\GUI.md;." ^
+  --add-data "%~dp0..\README.md;." ^
+  --add-data "%~dp0..\config_defaults.toml;." ^
+  --noupx ^
+  --windowed ^
   src\vt1\gui\main.py
 
 if errorlevel 1 (
-  echo [ERROR] GUI build failed
+  echo [ERROR] GUI build failed with exit code %ERRORLEVEL%
   exit /b 1
 ) else (
-  echo [INFO] GUI exe built
+  echo [SUCCESS] GUI exe built successfully
 )
 
 echo.

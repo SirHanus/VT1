@@ -14,7 +14,7 @@ import torch
 from ultralytics import YOLO
 from tqdm import tqdm
 import json
-from datetime import datetime
+from datetime import datetime, timezone
 
 from vt1.pipeline.sam_general import SAM2VideoWrapper  # same folder in package
 from vt1.config import settings
@@ -157,22 +157,22 @@ def parse_args():
                     help="Ultralytics YOLO pose model path/name")
     ap.add_argument("--sam2", type=str, default="facebook/sam2-hiera-large", help="HF SAM2 model id")
     ap.add_argument("--device", type=str, default="cuda", help="'cuda' or 'cpu'")
-    ap.add_argument("--imgsz", type=int, default=640, help="YOLO inference size")
-    ap.add_argument("--conf", type=float, default=0.25, help="YOLO confidence threshold")
+    ap.add_argument("--imgsz", type=int, default=int(cfg.yolo_imgsz), help="YOLO inference size")
+    ap.add_argument("--conf", type=float, default=float(cfg.yolo_conf), help="YOLO confidence threshold")
     ap.add_argument("--max-frames", type=int, default=0, help="Process at most N frames (0 = all)")
     ap.add_argument("--show", action="store_true", help="Show a live window")
     ap.add_argument("--no-sam", action="store_true", help="Disable SAM and only draw pose (faster)")
     ap.add_argument("--half", action="store_true", help="Use FP16 for YOLO on CUDA")
-    ap.add_argument("--sam-every", type=int, default=1, help="Run SAM every N frames (1=every frame)")
-    ap.add_argument("--sam-topk", type=int, default=10, help="Limit SAM to top-K boxes per frame")
-    ap.add_argument("--sam-reinit", type=int, default=60, help="Re-init SAM2 every N frames (0=never)")
-    ap.add_argument("--empty-cache-interval", type=int, default=25,
+    ap.add_argument("--sam-every", type=int, default=int(cfg.sam_every), help="Run SAM every N frames (1=every frame)")
+    ap.add_argument("--sam-topk", type=int, default=int(cfg.sam_topk), help="Limit SAM to top-K boxes per frame")
+    ap.add_argument("--sam-reinit", type=int, default=int(cfg.sam_reinit), help="Re-init SAM2 every N frames (0=never)")
+    ap.add_argument("--empty-cache-interval", type=int, default=int(cfg.empty_cache_interval),
                     help="Call torch.cuda.empty_cache() every N frames on CUDA (0=never)")
     ap.add_argument("--metrics-json", type=str, default="", help="If set, write per-run metrics JSON to this path")
     ap.add_argument("--team-models", type=str, default=str(cfg.team_models_dir),
                     help="Directory containing umap.pkl and kmeans.pkl")
-    ap.add_argument("--siglip", type=str, default="google/siglip-base-patch16-224", help="SigLIP model id (vision)")
-    ap.add_argument("--central-ratio", type=float, default=0.6, help="Central crop ratio for team inference")
+    ap.add_argument("--siglip", type=str, default=str(cfg.siglip_model), help="SigLIP model id (vision)")
+    ap.add_argument("--central-ratio", type=float, default=float(cfg.central_ratio_default), help="Central crop ratio for team inference")
     ap.add_argument("--disable-team", action="store_true", help="Disable team coloring even if models are present")
     ap.add_argument("--out-dir", type=str, default=str(cfg.pipeline_output_dir), help="Override output directory root")
     return ap.parse_args()
@@ -459,7 +459,7 @@ def main():
     # Build per-run metrics and optionally write JSON
     try:
         metrics = {
-            "ts": datetime.utcnow().isoformat() + "Z",
+            "ts": datetime.now(timezone.utc).isoformat(),  # previously datetime.utcnow() + 'Z'
             "status": "ok",
             "source": str(args.source),
             "out": str(out_path),  # Auto-generated

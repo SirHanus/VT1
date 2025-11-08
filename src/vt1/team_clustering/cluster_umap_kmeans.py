@@ -57,6 +57,7 @@ def parse_args() -> argparse.Namespace:
         umap_metric_default = str(cfg.umap_metric)
         umap_min_dist_default = float(cfg.umap_min_dist)
         seed_default = int(cfg.random_seed)
+        save_models_default = bool(cfg.save_models_default)
     else:
         from pathlib import Path as _P
         local_base = _P(__file__).resolve().parent / "clustering"
@@ -67,6 +68,7 @@ def parse_args() -> argparse.Namespace:
         umap_metric_default = "cosine"
         umap_min_dist_default = 0.1
         seed_default = 0
+        save_models_default = True
     ap.add_argument("--in-root", type=str, default=str(local_base),
                     help="Root directory with per-video embeddings (default: config team_output_dir)")
     ap.add_argument("--out-dir", type=str, default=str(local_base),
@@ -82,7 +84,13 @@ def parse_args() -> argparse.Namespace:
     ap.add_argument("--limit", type=int, default=0, help="Limit N total rows (0=all)")
     ap.add_argument("--plot", action="store_true", help="Save a 2D scatter plot if umap-dim>=2 and matplotlib available")
     ap.add_argument("--seed", type=int, default=seed_default, help="Random seed (config random_seed)")
-    ap.add_argument("--save-models", action="store_true", help="Persist fitted UMAP and KMeans models (umap.pkl, kmeans.pkl)")
+    # Save models: default from config, can be enabled with --save-models or disabled with --no-save-models
+    save_group = ap.add_mutually_exclusive_group()
+    save_group.add_argument("--save-models", dest="save_models", action="store_true",
+                            default=save_models_default,
+                            help="Persist fitted UMAP and KMeans models (default from config save_models_default)")
+    save_group.add_argument("--no-save-models", dest="save_models", action="store_false",
+                            help="Disable saving models (override config)")
     return ap.parse_args()
 
 

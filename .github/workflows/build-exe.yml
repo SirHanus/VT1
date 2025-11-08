@@ -45,6 +45,7 @@ jobs:
         shell: cmd
         run: |
           pip install -U pip wheel
+          pip install "setuptools==70.2.0"
           pip install "pyinstaller==6.11.*" pyinstaller-hooks-contrib
           pip install .[build]
           pip list
@@ -56,32 +57,52 @@ jobs:
           pyinstaller --clean --noconfirm --onedir ^
             --name vt1-pipeline ^
             --paths src ^
+            --additional-hooks-dir hooks ^
+            --runtime-hook hooks\rthook_suppress_torch_warnings.py ^
             --hidden-import vt1.pipeline.sam_general ^
             --hidden-import vt1.pipeline.sam_offline ^
+            --noupx ^
             src\vt1\pipeline\sam_offline.py
           REM Pipeline (onefile)
           pyinstaller --clean --noconfirm --onefile ^
             --name vt1-pipeline-onefile ^
             --paths src ^
+            --additional-hooks-dir hooks ^
+            --runtime-hook hooks\rthook_suppress_torch_warnings.py ^
             --hidden-import vt1.pipeline.sam_general ^
             --hidden-import vt1.pipeline.sam_offline ^
+            --noupx ^
             src\vt1\pipeline\sam_offline.py
           REM GUI (onedir)
           pyinstaller --clean --noconfirm --onedir ^
             --name vt1-gui ^
             --paths src ^
+            --additional-hooks-dir hooks ^
+            --runtime-hook hooks\rthook_suppress_torch_warnings.py ^
             --hidden-import vt1.gui.pipeline_tab ^
             --hidden-import vt1.gui.clustering_tab ^
             --hidden-import vt1.gui.help_tab ^
+            --hidden-import vt1.gui.startup_dialog ^
+            --add-data "GUI.md;." ^
+            --add-data "README.md;." ^
+            --add-data "config_defaults.toml;." ^
+            --noupx ^
             --windowed ^
             src\vt1\gui\main.py
           REM GUI (onefile)
           pyinstaller --clean --noconfirm --onefile ^
             --name vt1-gui-onefile ^
             --paths src ^
+            --additional-hooks-dir hooks ^
+            --runtime-hook hooks\rthook_suppress_torch_warnings.py ^
             --hidden-import vt1.gui.pipeline_tab ^
             --hidden-import vt1.gui.clustering_tab ^
             --hidden-import vt1.gui.help_tab ^
+            --hidden-import vt1.gui.startup_dialog ^
+            --add-data "GUI.md;." ^
+            --add-data "README.md;." ^
+            --add-data "config_defaults.toml;." ^
+            --noupx ^
             --windowed ^
             src\vt1\gui\main.py
 

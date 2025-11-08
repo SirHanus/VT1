@@ -51,6 +51,13 @@ class Config:
     eval_frame_step: int
     eval_limit_images: int
     yolo_max_boxes: int
+    # Pipeline SAM2 defaults
+    sam_every: int
+    sam_topk: int
+    sam_reinit: int
+    empty_cache_interval: int
+    # Clustering behavior defaults
+    save_models_default: bool
 
     def ensure_dirs(self) -> None:
         for p in [self.models_dir, self.team_models_dir, self.pipeline_output_dir, self.team_output_dir]:
@@ -115,6 +122,13 @@ def _coerce_paths(repo_root: Path, raw: Dict[str, Any]) -> Dict[str, Any]:
     out['eval_frame_step'] = int(raw.get('eval_frame_step', 30))
     out['eval_limit_images'] = int(raw.get('eval_limit_images', 50))
     out['yolo_max_boxes'] = int(raw.get('yolo_max_boxes', 8))
+    # SAM2 defaults coercion
+    out['sam_every'] = int(raw.get('sam_every', 1))
+    out['sam_topk'] = int(raw.get('sam_topk', 10))
+    out['sam_reinit'] = int(raw.get('sam_reinit', 0))
+    out['empty_cache_interval'] = int(raw.get('empty_cache_interval', 0))
+    # Clustering behavior defaults
+    out['save_models_default'] = bool(raw.get('save_models_default', True))
     return out
 
 
