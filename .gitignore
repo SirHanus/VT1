@@ -199,6 +199,10 @@ cython_debug/
 #  exclude from AI features like autocomplete and code analysis. Recommended for sensitive data
 #  refer to https://docs.cursor.com/context/ignore-files
 .cursorignore
+
+# VT1 user-specific files
+.vt1_setup_skipped
+
 .cursorindexingignore
 
 # Marimo

@@ -309,7 +309,6 @@ class PipelineTab(QtWidgets.QWidget):
             cursor.movePosition(QtGui.QTextCursor.MoveOperation.End)
             cursor.select(QtGui.QTextCursor.SelectionType.BlockUnderCursor);
             cursor.removeSelectedText();
-            cursor.deletePreviousChar()
         self.txt_log.appendPlainText(f"[Progress] {line.strip()}")
 
     def _parse_progress(self, chunk: str) -> bool:

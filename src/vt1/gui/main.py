@@ -34,11 +34,29 @@ class App(QtWidgets.QWidget):
 
 
 def check_first_run() -> bool:
-    """Check if this is the first run (no team models exist)."""
+    """Check if this is the first run (no team models exist AND no skip marker)."""
     cfg = settings()
     umap_pkl = cfg.team_models_dir / "umap.pkl"
     kmeans_pkl = cfg.team_models_dir / "kmeans.pkl"
-    return not (umap_pkl.exists() and kmeans_pkl.exists())
+
+    # Check for skip marker file (user chose to skip setup)
+    skip_marker = cfg.repo_root / ".vt1_setup_skipped"
+
+    # If models exist OR user already skipped, don't show dialog
+    if (umap_pkl.exists() and kmeans_pkl.exists()) or skip_marker.exists():
+        return False
+
+    return True
+
+
+def mark_setup_skipped():
+    """Create a marker file indicating user skipped the setup dialog."""
+    cfg = settings()
+    skip_marker = cfg.repo_root / ".vt1_setup_skipped"
+    try:
+        skip_marker.touch()
+    except Exception:
+        pass
 
 
 def main():
@@ -70,7 +88,10 @@ def main():
                 )
                 if reply == QtWidgets.QMessageBox.StandardButton.No:
                     return 1
-        # else: choice == "skip", continue to main GUI
+        elif choice == "skip":
+            # User chose to skip - mark it so we don't ask again
+            mark_setup_skipped()
+        # Continue to main GUI
 
     w = App()
     w.show()

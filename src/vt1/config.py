@@ -134,6 +134,7 @@ def _coerce_paths(repo_root: Path, raw: Dict[str, Any]) -> Dict[str, Any]:
 
 def _load() -> Config:
     repo = _repo_root()
+    print(repo)
     defaults = _read_toml(repo / 'config_defaults.toml')
     local = _read_toml(repo / 'config_local.toml')
     merged: Dict[str, Any] = {**defaults, **local}
