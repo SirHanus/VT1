@@ -381,21 +381,24 @@ class TrainingWorkflowRunner(QtWidgets.QWidget):
             self.close()
 
 
-def show_startup_dialog(parent: Optional[QtWidgets.QWidget] = None) -> Optional[str]:
+def show_startup_dialog(parent: Optional[QtWidgets.QWidget] = None) -> str:
     """
     Show startup dialog and return user choice.
 
     Returns:
         'run' if user wants to run workflow
         'skip' if user wants to skip
-        'exit' if user wants to exit
-        None if dialog was cancelled
+        'exit' if user wants to exit (clicked Exit button or closed window)
     """
     dialog = StartupDialog(parent)
     result = dialog.exec()
     if result == QtWidgets.QDialog.DialogCode.Accepted:
+        # User clicked Run or Skip
         return dialog.user_choice
-    return "exit"
+    else:
+        # User clicked Exit button or closed the window
+        # In both cases, user_choice will be 'exit' or None (if closed without clicking anything)
+        return dialog.user_choice if dialog.user_choice else "exit"
 
 
 def run_training_workflow(parent: Optional[QtWidgets.QWidget] = None) -> bool:

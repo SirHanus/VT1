@@ -65,10 +65,9 @@ def main():
 
     # Show startup dialog if first run
     if check_first_run():
-        # Mark that we've shown the dialog (so we don't show it again)
-
         choice = show_startup_dialog()
         if choice == "exit":
+            # User closed the dialog - exit without marking as skipped
             return 0
         elif choice == "run":
             # Run training workflow
@@ -93,7 +92,10 @@ def main():
                 )
                 if reply == QtWidgets.QMessageBox.StandardButton.No:
                     return 1
-        # Continue to main GUI (whether they chose 'run' or 'skip')
+        elif choice == "skip":
+            # User chose to skip - mark it so we don't ask again
+            mark_setup_skipped()
+        # Continue to main GUI (for 'run' or 'skip')
 
     w = App()
     w.show()
