@@ -202,7 +202,6 @@ class TrainingWorkflowRunner(QtWidgets.QWidget):
                 "--central-ratio", str(cfg.central_ratio_default),
                 "--siglip", str(cfg.siglip_model),
                 "--device", "cuda",
-                "--yolo-fallback",  # safer default
                 "--yolo-model", str(cfg.yolo_model),
             ]
         elif step_name == "cluster":

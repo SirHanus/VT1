@@ -1,7 +1,7 @@
 # Default configuration for VT1 (edit config_local.toml to override)
 models_dir = "models"                           # Root folder where model files live; other model paths are resolved relative to this
 pose_model = "models/yolo11x-pose.pt"            # Default YOLO pose model used in the pipeline for keypoints; change to switch pose backbone
-yolo_model = "models/yolo11n.pt"                 # Default YOLO detection model (used in fallback detection and eval); change to alter detector size/accuracy
+yolo_model = "models/yolo11n.pt"                 # Default YOLO detection model (used in team clustering and eval); change to alter detector size/accuracy
 # Trained team clustering models (umap.pkl, kmeans.pkl) default to outputs
 team_models_dir = "models/team_clustering"       # Folder where UMAP/KMeans .pkl are saved/loaded; clustering saves here, eval/pipeline read from here
 # Root-level outputs folder
@@ -16,7 +16,6 @@ yolo_conf = 0.30                                  # YOLO confidence threshold; h
 yolo_imgsz = 640                                   # YOLO inference size; larger = slower but potentially more accurate detections
 central_ratio_default = 0.6                        # Fraction of the bbox kept around center for crops; lower zooms in on jerseys, higher keeps more context
 siglip_model = "google/siglip-base-patch16-224"  # SigLIP vision model id (HF); changing affects embedding dimensionality/quality and VRAM needs
-person_class_name = "person"                      # MMDetection class name to treat as players; change if your detector uses a different label
 
 # Build training set sampling
 training_videos_dir = "videos_all/CAR_vs_NYR"     # Default folder scanned for videos when building the training set

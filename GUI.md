@@ -83,7 +83,7 @@ Extract player crops and embeddings.
 
 Key inputs:
 - Videos dir + Glob: Source video selection.
-- Detector: RF-DETR-S (MMDetection) or YOLO fallback (auto if RF-DETR config/weights absent).
+- YOLO model: Ultralytics YOLO model for player detection.
 - FPS: Frame sampling rate.
 - Central ratio / Min crop size: Crop refinement.
 - SigLIP model: Embedding backbone.

@@ -74,7 +74,7 @@ def parse_args() -> argparse.Namespace:
     src = ap.add_argument_group("Sources")
     src.add_argument("--images-dir", type=str, default="", help="Directory of test images")
     src.add_argument("--glob", type=str, default="*.jpg;*.png;*.jpeg;*.JPG;*.PNG;*.JPEG", help="Semicolon-separated patterns for images")
-    src.add_argument("--video", type=str, default=str(root / 'data_hockey.mp4'), help="Optional: sample frames from a video file")
+    src.add_argument("--video", type=str, default=str(root / 'data_hockey_colored.mp4'), help="Optional: sample frames from a video file")
     src.add_argument("--frame-step", type=int, default=int(cfg.eval_frame_step), help="Take 1 frame every N frames when reading a video")
     src.add_argument("--max-frames", type=int, default=0, help="Stop after N frames sampled (0=all)")
 

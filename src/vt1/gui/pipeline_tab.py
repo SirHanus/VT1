@@ -138,7 +138,7 @@ class PipelineTab(QtWidgets.QWidget):
     def _fill_defaults(self):
         cfg = settings()
         root = cfg.repo_root
-        self.ed_source.setText(str(root / "data_hockey.mp4"))
+        self.ed_source.setText(str(root / "data_hockey_colored.mp4"))
         self.ed_pose_model.setText(str(cfg.pose_model))
         self.ed_sam2.setText("facebook/sam2-hiera-large")
         self.cb_device.setCurrentText("cuda")

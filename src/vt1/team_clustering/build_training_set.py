@@ -2,7 +2,7 @@
 """
 Build training set for Unsupervised Team Clustering using:
 - 1 FPS frame sampling from one or more videos
-- Player detection via RF-DETR-S (MMDetection). Optional YOLO fallback.
+- Player detection via YOLO pose
 - Central-crop of each detection to reduce noise
 - SigLIP Vision embeddings for each crop
 """
@@ -36,7 +36,7 @@ class DetResult:
 def parse_args() -> argparse.Namespace:
     cfg = settings()
     root = cfg.repo_root
-    ap = argparse.ArgumentParser("Build dataset: 1 FPS -> RF-DETR-S -> central crop -> SigLIP embeddings")
+    ap = argparse.ArgumentParser("Build dataset: 1 FPS -> YOLO detection -> central crop -> SigLIP embeddings")
 
     # Inputs
     ap.add_argument("--videos-dir", type=str, default=str(cfg.training_videos_dir),
@@ -45,19 +45,10 @@ def parse_args() -> argparse.Namespace:
     ap.add_argument("--videos", type=str, nargs="*", default=None,
                     help="Explicit list of video files (overrides --videos-dir/--glob)")
 
-    # Detection (MMDetection RF-DETR-S)
-    ap.add_argument("--det-config", type=str, default="",
-                    help="MMDetection config path for RF-DETR-S")
-    ap.add_argument("--det-weights", type=str, default="",
-                    help="Checkpoint .pth for RF-DETR-S")
-    ap.add_argument("--det-score-thr", type=float, default=float(cfg.det_score_thr_default), help="Score threshold for detections")
-    ap.add_argument("--person-class-name", type=str, default=str(cfg.person_class_name),
-                    help="Class name to treat as player/person in the detector's classes")
-
-    # YOLO fallback
-    ap.add_argument("--yolo-fallback", action="store_true", help="Enable YOLO fallback if MMDetection is unavailable")
+    # Detection (YOLO)
     ap.add_argument("--yolo-model", type=str, default=str(cfg.yolo_model),
-                    help="Ultralytics YOLO model path/name for fallback")
+                    help="Ultralytics YOLO model path/name")
+    ap.add_argument("--det-score-thr", type=float, default=float(cfg.det_score_thr_default), help="Score threshold for detections")
 
     # Sampling
     ap.add_argument("--fps", type=float, default=float(cfg.build_fps), help="Target frames per second to sample (default 1 FPS)")
@@ -143,71 +134,7 @@ def iter_sampled_frames(video_path: Path, fps_target: float):
 
 
 # ---------------- Detection wrappers ----------------
-class RFDETRDetector:
-    def __init__(self, config: str, checkpoint: str, device: str = "cuda", person_class_name: str = "person"):
-        # Lazy import via importlib to avoid static import errors
-        import importlib
-        try:
-            mmdet_apis = importlib.import_module("mmdet.apis")
-            init_detector = getattr(mmdet_apis, "init_detector")
-        except Exception as e:
-            raise RuntimeError("MMDetection not available. Install mmdet and mmcv or use --yolo-fallback.") from e
-        if not (config and checkpoint):
-            raise ValueError("--det-config and --det-weights are required for RF-DETR-S")
-        self.model = init_detector(config, checkpoint, device=device)
-        # Attempt to get class mapping
-        self.classes = None
-        try:
-            self.classes = tuple(self.model.dataset_meta.get('classes', ()))
-        except Exception:
-            self.classes = None
-        if self.classes and person_class_name in self.classes:
-            self.person_id = self.classes.index(person_class_name)
-        else:
-            # Common COCO fallback: person id 0
-            self.person_id = 0
-
-    def detect(self, img: np.ndarray, score_thr: float = 0.3) -> List[DetResult]:
-        import importlib
-        try:
-            mmdet_apis = importlib.import_module("mmdet.apis")
-            inference_detector = getattr(mmdet_apis, "inference_detector")
-        except Exception as e:
-            raise RuntimeError("MMDetection not available at inference time.") from e
-        data_sample = inference_detector(self.model, img)
-        # mmdet>=3 returns DetDataSample, extract pred_instances
-        try:
-            pred = data_sample.pred_instances
-            bboxes = pred.bboxes.tensor.detach().cpu().numpy() if hasattr(pred.bboxes, 'tensor') else pred.bboxes.detach().cpu().numpy()
-            scores = pred.scores.detach().cpu().numpy()
-            labels = pred.labels.detach().cpu().numpy()
-        except Exception:
-            # Older format or unexpected; try generic
-            try:
-                result = data_sample  # could be tuple
-                if isinstance(result, (list, tuple)):
-                    result = result[0]
-                bboxes = result[:, :4]
-                scores = result[:, 4]
-                labels = result[:, 5].astype(int)
-            except Exception as e:
-                raise RuntimeError(f"Unsupported detector output: {type(data_sample)} | {e}")
-
-        out: List[DetResult] = []
-        for bb, sc, lb in zip(bboxes, scores, labels):
-            if sc < score_thr:
-                continue
-            if int(lb) != int(self.person_id):
-                continue
-            x1, y1, x2, y2 = map(float, bb[:4])
-            # Skip invalid boxes
-            if x2 <= x1 + 1 or y2 <= y1 + 1:
-                continue
-            out.append(DetResult((x1, y1, x2, y2), float(sc), int(lb)))
-        return out
-
-
-class YOLOFallbackDetector:
+class YOLODetector:
     def __init__(self, model_name: str, device: str = "cuda"):
         # Lazy import ultralytics
         try:
@@ -454,30 +381,12 @@ def main() -> int:
         print(f"[ERROR] No videos found. Checked: --videos {args.videos} or {args.videos_dir} / {args.glob}")
         return 1
 
-    # Detector selection
-    use_rfdetr = bool(args.det_config and args.det_weights)
-    use_yolo_fb = bool(args.yolo_fallback or not use_rfdetr)
-    if (not use_rfdetr) and (not args.yolo_fallback):
-        print("[INFO] RF-DETR config/weights not provided; enabling YOLO fallback automatically.")
-
-    detector = None
-    det_name = None
-    if use_rfdetr:
-        try:
-            detector = RFDETRDetector(args.det_config, args.det_weights, device=device, person_class_name=args.person_class_name)
-            det_name = "rf-detr-s"
-        except Exception as e:
-            print(f"[WARN] RF-DETR init failed: {e}")
-            detector = None
-    if detector is None and use_yolo_fb:
-        try:
-            detector = YOLOFallbackDetector(args.yolo_model, device=device)
-            det_name = "yolo-fallback"
-        except Exception as e:
-            print(f"[WARN] YOLO fallback init failed: {e}")
-            detector = None
-    if detector is None:
-        print("[ERROR] No detector available. Provide --det-config/--det-weights for RF-DETR-S or enable --yolo-fallback.")
+    # Initialize YOLO detector
+    try:
+        detector = YOLODetector(args.yolo_model, device=device)
+        det_name = "yolo"
+    except Exception as e:
+        print(f"[ERROR] YOLO detector init failed: {e}")
         return 1
 
     # Init embedder

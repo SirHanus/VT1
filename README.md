@@ -62,6 +62,7 @@ Useful flags:
    ```cmd
    python -m vt1.team_clustering.build_training_set ^
      --videos-dir videos_all/CAR_vs_NYR --glob *.mp4 ^
+     --yolo-model models/yolo11n.pt ^
      --fps 1 --device cuda --save-crops ^
      --out-dir outputs/team_clustering
    ```

@@ -130,36 +130,20 @@ class ClusteringTab(QtWidgets.QWidget):
         ed_glob = QtWidgets.QLineEdit(str(cfg.videos_glob));
         ed_glob.setToolTip('Glob to match videos inside --videos-dir (--glob)')
         form.addRow('Glob (--glob)', ed_glob)
-        ed_det_config = QtWidgets.QLineEdit();
-        ed_det_config.setToolTip('MMDetection config path for RF-DETR-S (--det-config)')
-        btn_det_config = QtWidgets.QPushButton('Browse…');
-        btn_det_config.setToolTip('Pick RF-DETR-S config (.py)');
-        btn_det_config.clicked.connect(lambda: self._pick_file_into(ed_det_config, 'Config (*.py);;All (*)'))
-        form.addRow('Det config (--det-config)', self._row(ed_det_config, btn_det_config))
-        ed_det_weights = QtWidgets.QLineEdit();
-        ed_det_weights.setToolTip('Checkpoint .pth for RF-DETR-S (--det-weights)')
-        btn_det_weights = QtWidgets.QPushButton('Browse…');
-        btn_det_weights.setToolTip('Pick RF-DETR-S weights (.pth)');
-        btn_det_weights.clicked.connect(lambda: self._pick_file_into(ed_det_weights, 'Weights (*.pth);;All (*)'))
-        form.addRow('Det weights (--det-weights)', self._row(ed_det_weights, btn_det_weights))
+
+        ed_yolo_model = QtWidgets.QLineEdit(str(cfg.yolo_model));
+        ed_yolo_model.setToolTip('Ultralytics YOLO model path/name (--yolo-model)')
+        btn_yolo_model = QtWidgets.QPushButton('Browse…');
+        btn_yolo_model.setToolTip('Pick YOLO model (.pt/.onnx)');
+        btn_yolo_model.clicked.connect(lambda: self._pick_file_into(ed_yolo_model, 'Model (*.pt *.onnx);;All (*)'))
+        form.addRow('YOLO model (--yolo-model)', self._row(ed_yolo_model, btn_yolo_model))
+
         ds_det_thr = QtWidgets.QDoubleSpinBox();
         ds_det_thr.setRange(0.0, 1.0);
         ds_det_thr.setSingleStep(0.01);
         ds_det_thr.setValue(float(cfg.det_score_thr_default));
         ds_det_thr.setToolTip('Score threshold for detections (--det-score-thr)')
         form.addRow('Det score thr (--det-score-thr)', ds_det_thr)
-        ed_person = QtWidgets.QLineEdit(str(cfg.person_class_name));
-        ed_person.setToolTip('Class name to treat as player/person (--person-class-name)')
-        form.addRow('Person class (--person-class-name)', ed_person)
-        cb_yolo_fallback = QtWidgets.QCheckBox('Enable YOLO fallback');
-        cb_yolo_fallback.setToolTip('Enable YOLO fallback if MMDetection is unavailable (--yolo-fallback)')
-        form.addRow('YOLO fallback (--yolo-fallback)', cb_yolo_fallback)
-        ed_yolo_model = QtWidgets.QLineEdit(str(cfg.yolo_model));
-        ed_yolo_model.setToolTip('Ultralytics YOLO model path/name for fallback (--yolo-model)')
-        btn_yolo_model = QtWidgets.QPushButton('Browse…');
-        btn_yolo_model.setToolTip('Pick YOLO model (.pt/.onnx)');
-        btn_yolo_model.clicked.connect(lambda: self._pick_file_into(ed_yolo_model, 'Model (*.pt *.onnx);;All (*)'))
-        form.addRow('YOLO model (--yolo-model)', self._row(ed_yolo_model, btn_yolo_model))
         ds_fps = QtWidgets.QDoubleSpinBox();
         ds_fps.setRange(0.1, 60.0);
         ds_fps.setSingleStep(0.1);
@@ -228,9 +212,8 @@ class ClusteringTab(QtWidgets.QWidget):
         lay.addWidget(log, 1)
         widgets = {'proc': None, 'run': btn_run, 'stop': btn_stop, 'status': status, 'progress': pb, 'log': log}
         btn_run.clicked.connect(lambda: self._start('vt1.team_clustering.build_training_set', self._args_build(
-            ed_videos_dir.text(), ed_glob.text(), ed_det_config.text(), ed_det_weights.text(), ds_det_thr.value(),
-            ed_person.text(),
-            cb_yolo_fallback.isChecked(), ed_yolo_model.text(), ds_fps.value(), sb_max_seconds.value(),
+            ed_videos_dir.text(), ed_glob.text(), ed_yolo_model.text(), ds_det_thr.value(),
+            ds_fps.value(), sb_max_seconds.value(),
             ds_central.value(), sb_min_crop.value(),
             ed_siglip.text(), sb_batch.value(), cb_device.currentText(), ed_out_dir.text(), cb_save_crops.isChecked(),
             sb_seed.value(), cb_verbose.isChecked()
@@ -238,7 +221,7 @@ class ClusteringTab(QtWidgets.QWidget):
         btn_stop.clicked.connect(lambda: self._stop(widgets))
         return w
 
-    def _args_build(self, videos_dir, glob, det_config, det_weights, det_thr, person_cls, yolo_fallback, yolo_model,
+    def _args_build(self, videos_dir, glob, yolo_model, det_thr,
                     fps, max_seconds, central_ratio, min_crop, siglip, batch, device, out_dir, save_crops, seed,
                     verbose):
         args = []
@@ -251,11 +234,8 @@ class ClusteringTab(QtWidgets.QWidget):
 
         add('--videos-dir', videos_dir);
         add('--glob', glob)
-        if det_config: add('--det-config', det_config)
-        if det_weights: add('--det-weights', det_weights)
+        add('--yolo-model', yolo_model)
         add('--det-score-thr', det_thr);
-        add('--person-class-name', person_cls)
-        if yolo_fallback: args.append('--yolo-fallback'); add('--yolo-model', yolo_model)
         add('--fps', fps);
         add('--max-seconds', max_seconds);
         add('--central-ratio', central_ratio);
@@ -462,7 +442,7 @@ class ClusteringTab(QtWidgets.QWidget):
         ed_glob = QtWidgets.QLineEdit('*.jpg;*.png;*.jpeg;*.JPG;*.PNG;*.JPEG');
         ed_glob.setToolTip('Semicolon-separated patterns for images (--glob)')
         form.addRow('Glob (--glob)', ed_glob)
-        ed_video = QtWidgets.QLineEdit(str(root / 'data_hockey.mp4'));
+        ed_video = QtWidgets.QLineEdit(str(root / 'data_hockey_colored.mp4'))
         ed_video.setToolTip('Video file (--video)')
         btn_video = QtWidgets.QPushButton('Browse…');
         btn_video.setToolTip('Pick video file');

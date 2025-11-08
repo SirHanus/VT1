@@ -152,7 +152,7 @@ def draw_text(img, text, x, y, scale=0.6, color=(255, 255, 255), thickness=1):
 def parse_args():
     cfg = settings()
     ap = argparse.ArgumentParser("POC: YOLO pose + SAM2 segmentation on data_hockey.mp4 (optimized)")
-    ap.add_argument("--source", type=str, default=str(cfg.repo_root / "data_hockey.mp4"), help="Video source path")
+    ap.add_argument("--source", type=str, default=str(cfg.repo_root / "data_hockey_colored.mp4"), help="Video source path")
     ap.add_argument("--pose-model", type=str, default=str(cfg.pose_model),
                     help="Ultralytics YOLO pose model path/name")
     ap.add_argument("--sam2", type=str, default="facebook/sam2-hiera-large", help="HF SAM2 model id")

@@ -35,7 +35,6 @@ class Config:
     yolo_imgsz: int
     central_ratio_default: float
     siglip_model: str
-    person_class_name: str
     training_videos_dir: Path
     videos_glob: str
     build_fps: float
@@ -106,7 +105,6 @@ def _coerce_paths(repo_root: Path, raw: Dict[str, Any]) -> Dict[str, Any]:
     out['yolo_imgsz'] = int(raw.get('yolo_imgsz', 640))
     out['central_ratio_default'] = float(raw.get('central_ratio_default', 0.6))
     out['siglip_model'] = str(raw.get('siglip_model', 'google/siglip-base-patch16-224'))
-    out['person_class_name'] = str(raw.get('person_class_name', 'person'))
     out['training_videos_dir'] = rp(raw.get('training_videos_dir', 'videos_all/CAR_vs_NYR'))
     out['videos_glob'] = str(raw.get('videos_glob', '*.mp4'))
     out['build_fps'] = float(raw.get('build_fps', 1.0))

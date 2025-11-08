@@ -71,7 +71,7 @@ Samples frames from game videos, detects players, crops them, and generates SigL
 python offline_pipeline\team_clustering\build_training_set.py ^
   --videos-dir videos_all\CAR_vs_NYR ^
   --glob "*.mp4" ^
-  --yolo-fallback --yolo-model yolo11n.pt ^
+  --yolo-model yolo11n.pt ^
   --central-ratio 0.6 ^
   --save-crops
 ```
@@ -79,8 +79,7 @@ python offline_pipeline\team_clustering\build_training_set.py ^
 **Key Arguments:**
 - `--videos-dir` - Directory containing training videos (one game)
 - `--glob` - File pattern (default: `*.mp4`)
-- `--yolo-fallback` - Use YOLO for detection (simpler than RF-DETR)
-- `--yolo-model` - YOLO model path
+- `--yolo-model` - YOLO model path for player detection
 - `--central-ratio` - Crop ratio to focus on uniform (default: 0.6)
 - `--save-crops` - Save cropped player images for inspection
 - `--frame-step` - Sample every Nth frame (default: 30, ~1fps)
@@ -216,7 +215,7 @@ REM Step 1: Build training set from 3-5 clips of the same match
 python offline_pipeline\team_clustering\build_training_set.py ^
   --videos-dir videos_all\CAR_vs_NYR ^
   --glob "*.mp4" ^
-  --yolo-fallback --yolo-model yolo11n.pt ^
+  --yolo-model yolo11n.pt ^
   --central-ratio 0.6 ^
   --save-crops ^
   --frame-step 30 ^
