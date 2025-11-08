@@ -1,0 +1,30 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "vt1"
+version = "0.1.0"
+description = "VT1 Hockey Pose + Team Clustering (PyQt6 GUI + pipelines)"
+requires-python = ">=3.10"
+authors = [{ name = "VT1" }]
+dependencies = [
+  "PyQt6",
+  "opencv-python",
+  "numpy",
+  "torch",
+  "ultralytics",
+  "tqdm",
+  "transformers",
+  "joblib",
+]
+
+[project.optional-dependencies]
+build = ["pyinstaller>=6.0"]
+
+[project.scripts]
+vt1-gui = "vt1.gui.main:main"
+vt1-pipeline = "vt1.pipeline.sam_offline:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
