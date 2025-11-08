@@ -46,42 +46,42 @@ except Exception:
 
 
 def parse_args() -> argparse.Namespace:
-    # Default input/output from config if available; fallback to adjacent-to-script
     ap = argparse.ArgumentParser("UMAP + KMeans clustering for team separation")
-    local_base = None
-    models_base = None
-    if settings is not None:
-        try:
-            cfg = settings()
-            local_base = cfg.team_output_dir
-            models_base = cfg.team_models_dir
-        except Exception:
-            local_base = None
-            models_base = None
-    if local_base is None:
-        local_base = Path(__file__).resolve().parent / "clustering"
-    if models_base is None:
-        models_base = Path(__file__).resolve().parent / "clustering"
-
+    cfg = settings() if settings is not None else None
+    if cfg:
+        local_base = cfg.team_output_dir
+        models_base = cfg.team_models_dir
+        k_default = int(cfg.cluster_k)
+        umap_dim_default = int(cfg.umap_dim)
+        umap_neighbors_default = int(cfg.umap_neighbors)
+        umap_metric_default = str(cfg.umap_metric)
+        umap_min_dist_default = float(cfg.umap_min_dist)
+        seed_default = int(cfg.random_seed)
+    else:
+        from pathlib import Path as _P
+        local_base = _P(__file__).resolve().parent / "clustering"
+        models_base = local_base
+        k_default = 2
+        umap_dim_default = 16
+        umap_neighbors_default = 15
+        umap_metric_default = "cosine"
+        umap_min_dist_default = 0.1
+        seed_default = 0
     ap.add_argument("--in-root", type=str, default=str(local_base),
                     help="Root directory with per-video embeddings (default: config team_output_dir)")
     ap.add_argument("--out-dir", type=str, default=str(local_base),
                     help="Output directory for clustering artifacts (default: config team_output_dir)")
-    # New: where to save the fitted UMAP/KMeans models
     ap.add_argument("--models-dir", type=str, default=str(models_base),
                     help="Directory to save umap.pkl and kmeans.pkl (default: config team_models_dir)")
-
-    ap.add_argument("--k", type=int, default=2, help="Number of clusters for KMeans (e.g., 2 teams)")
-    ap.add_argument("--umap-dim", type=int, default=16, help="UMAP output dimensionality")
-    ap.add_argument("--umap-neighbors", type=int, default=15, help="UMAP n_neighbors")
-    ap.add_argument("--umap-metric", type=str, default="cosine", help="UMAP distance metric")
-    ap.add_argument("--umap-min-dist", type=float, default=0.1, help="UMAP min_dist (lower=more compact clusters)")
+    ap.add_argument("--k", type=int, default=k_default, help="Number of clusters for KMeans (default from config cluster_k)")
+    ap.add_argument("--umap-dim", type=int, default=umap_dim_default, help="UMAP output dimensionality (config umap_dim)")
+    ap.add_argument("--umap-neighbors", type=int, default=umap_neighbors_default, help="UMAP n_neighbors (config umap_neighbors)")
+    ap.add_argument("--umap-metric", type=str, default=umap_metric_default, help="UMAP distance metric (config umap_metric)")
+    ap.add_argument("--umap-min-dist", type=float, default=umap_min_dist_default, help="UMAP min_dist (config umap_min_dist)")
     ap.add_argument("--reuse-umap", type=str, default="", help="Path to a pre-trained umap.pkl to reuse (skip fitting)")
-
     ap.add_argument("--limit", type=int, default=0, help="Limit N total rows (0=all)")
     ap.add_argument("--plot", action="store_true", help="Save a 2D scatter plot if umap-dim>=2 and matplotlib available")
-
-    ap.add_argument("--seed", type=int, default=0, help="Random seed")
+    ap.add_argument("--seed", type=int, default=seed_default, help="Random seed (config random_seed)")
     ap.add_argument("--save-models", action="store_true", help="Persist fitted UMAP and KMeans models (umap.pkl, kmeans.pkl)")
     return ap.parse_args()
 

@@ -74,30 +74,30 @@ def parse_args() -> argparse.Namespace:
     src = ap.add_argument_group("Sources")
     src.add_argument("--images-dir", type=str, default="", help="Directory of test images")
     src.add_argument("--glob", type=str, default="*.jpg;*.png;*.jpeg;*.JPG;*.PNG;*.JPEG", help="Semicolon-separated patterns for images")
-    src.add_argument("--video", type=str, default="", help="Optional: sample frames from a video file")
-    src.add_argument("--frame-step", type=int, default=30, help="Take 1 frame every N frames when reading a video")
+    src.add_argument("--video", type=str, default=str(root / 'data_hockey.mp4'), help="Optional: sample frames from a video file")
+    src.add_argument("--frame-step", type=int, default=int(cfg.eval_frame_step), help="Take 1 frame every N frames when reading a video")
     src.add_argument("--max-frames", type=int, default=0, help="Stop after N frames sampled (0=all)")
 
     mdl = ap.add_argument_group("Models")
     mdl.add_argument("--team-models", type=str, default=str(cfg.team_models_dir),
-                     help="Folder with umap.pkl and kmeans.pkl (default: outputs/team_clustering)")
-    mdl.add_argument("--siglip", type=str, default="google/siglip-base-patch16-224", help="SigLIP model id")
+                     help="Folder with umap.pkl and kmeans.pkl (default: config team_models_dir)")
+    mdl.add_argument("--siglip", type=str, default=str(cfg.siglip_model), help="SigLIP model id")
     mdl.add_argument("--yolo-model", type=str, default=str(cfg.yolo_model), help="YOLO detection model path/id")
 
     det = ap.add_argument_group("Detection")
-    det.add_argument("--imgsz", type=int, default=640, help="YOLO inference size")
-    det.add_argument("--conf", type=float, default=0.30, help="YOLO confidence threshold")
-    det.add_argument("--max-boxes", type=int, default=8, help="Max boxes per image/frame to annotate")
+    det.add_argument("--imgsz", type=int, default=int(cfg.yolo_imgsz), help="YOLO inference size")
+    det.add_argument("--conf", type=float, default=float(cfg.yolo_conf), help="YOLO confidence threshold")
+    det.add_argument("--max-boxes", type=int, default=int(cfg.yolo_max_boxes), help="Max boxes per image/frame to annotate")
 
     inf = ap.add_argument_group("Inference")
-    inf.add_argument("--central-ratio", type=float, default=0.6, help="Central crop ratio of bbox")
+    inf.add_argument("--central-ratio", type=float, default=float(cfg.central_ratio_default), help="Central crop ratio of bbox")
     inf.add_argument("--device", type=str, default="cuda", help="cuda or cpu")
 
     out = ap.add_argument_group("Output")
     out.add_argument("--out-dir", type=str, default=str(local_base), help="Output directory root")
     out.add_argument("--show", action="store_true", help="Show previews in a window")
     out.add_argument("--save-grid", action="store_true", help="Save a mosaic grid of annotated images")
-    out.add_argument("--limit-images", type=int, default=50, help="Max annotated images to write")
+    out.add_argument("--limit-images", type=int, default=int(cfg.eval_limit_images), help="Max annotated images to write")
 
     return ap.parse_args()
 

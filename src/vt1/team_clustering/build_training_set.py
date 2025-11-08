@@ -39,9 +39,9 @@ def parse_args() -> argparse.Namespace:
     ap = argparse.ArgumentParser("Build dataset: 1 FPS -> RF-DETR-S -> central crop -> SigLIP embeddings")
 
     # Inputs
-    ap.add_argument("--videos-dir", type=str, default=str(root / "videos_all" / "CAR_vs_NYR"),
+    ap.add_argument("--videos-dir", type=str, default=str(cfg.training_videos_dir),
                     help="Directory with input videos (*.mp4)")
-    ap.add_argument("--glob", type=str, default="*.mp4", help="Glob to match videos inside --videos-dir")
+    ap.add_argument("--glob", type=str, default=str(cfg.videos_glob), help="Glob to match videos inside --videos-dir")
     ap.add_argument("--videos", type=str, nargs="*", default=None,
                     help="Explicit list of video files (overrides --videos-dir/--glob)")
 
@@ -50,8 +50,8 @@ def parse_args() -> argparse.Namespace:
                     help="MMDetection config path for RF-DETR-S")
     ap.add_argument("--det-weights", type=str, default="",
                     help="Checkpoint .pth for RF-DETR-S")
-    ap.add_argument("--det-score-thr", type=float, default=0.30, help="Score threshold for detections")
-    ap.add_argument("--person-class-name", type=str, default="person",
+    ap.add_argument("--det-score-thr", type=float, default=float(cfg.det_score_thr_default), help="Score threshold for detections")
+    ap.add_argument("--person-class-name", type=str, default=str(cfg.person_class_name),
                     help="Class name to treat as player/person in the detector's classes")
 
     # YOLO fallback
@@ -60,31 +60,30 @@ def parse_args() -> argparse.Namespace:
                     help="Ultralytics YOLO model path/name for fallback")
 
     # Sampling
-    ap.add_argument("--fps", type=float, default=1.0, help="Target frames per second to sample (default 1 FPS)")
+    ap.add_argument("--fps", type=float, default=float(cfg.build_fps), help="Target frames per second to sample (default 1 FPS)")
     ap.add_argument("--max-seconds", type=int, default=0, help="Limit seconds per video (0=all)")
 
     # Central crop
-    ap.add_argument("--central-ratio", type=float, default=0.6,
+    ap.add_argument("--central-ratio", type=float, default=float(cfg.central_ratio_default),
                     help="Fraction of bbox width/height to keep around center (0<r<=1)")
-    ap.add_argument("--min-crop-size", type=int, default=32, help="Discard crops smaller than this (pixels)")
+    ap.add_argument("--min-crop-size", type=int, default=int(cfg.build_min_crop_size), help="Discard crops smaller than this (pixels)")
 
     # SigLIP
-    ap.add_argument("--siglip", type=str, default="google/siglip-base-patch16-224",
+    ap.add_argument("--siglip", type=str, default=str(cfg.siglip_model),
                     help="SigLIP Vision model with projection (HF id)")
-    ap.add_argument("--batch", type=int, default=64, help="Embedding batch size")
+    ap.add_argument("--batch", type=int, default=int(cfg.build_batch_size), help="Embedding batch size")
 
     # Device
     ap.add_argument("--device", type=str, default="cuda", choices=["cuda", "cpu"], help="Inference device")
 
     # Outputs
-    # Default to team_clustering/clustering alongside this script (per new structure)
     local_base = cfg.team_output_dir
     ap.add_argument("--out-dir", type=str, default=str(local_base),
                     help="Output directory root (default: outputs/team_clustering)")
     ap.add_argument("--save-crops", action="store_true", help="Save crop images to disk")
 
     # Misc
-    ap.add_argument("--seed", type=int, default=0, help="Random seed for reproducibility")
+    ap.add_argument("--seed", type=int, default=int(cfg.random_seed), help="Random seed for reproducibility")
     ap.add_argument("--verbose", action="store_true")
 
     return ap.parse_args()
