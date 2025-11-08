@@ -15,25 +15,42 @@ If crops were not saved during dataset build, re-run build_training_set with --s
 from __future__ import annotations
 
 import argparse
-from pathlib import Path
-from typing import Dict, Any, List
 import csv
 import json
 import time
+from pathlib import Path
+from typing import Dict, Any, List
 
 import cv2
 import numpy as np
+
 from vt1.config import settings
 
 
 def parse_args() -> argparse.Namespace:
     cfg = settings()
     ap = argparse.ArgumentParser("Audit training set crops and stats")
-    ap.add_argument("--in-root", type=str, default=str(cfg.team_output_dir),
-                    help="Root folder containing per-video subfolders with index.csv (and crops/ if saved)")
-    ap.add_argument("--out-dir", type=str, default=str(cfg.team_output_dir), help="Output directory root")
-    ap.add_argument("--per-video", type=int, default=24, help="Max crops per video to include in mosaic")
-    ap.add_argument("--save-grid", action="store_true", help="Save per-video grid mosaics")
+    ap.add_argument(
+        "--in-root",
+        type=str,
+        default=str(cfg.team_output_dir),
+        help="Root folder containing per-video subfolders with index.csv (and crops/ if saved)",
+    )
+    ap.add_argument(
+        "--out-dir",
+        type=str,
+        default=str(cfg.team_output_dir),
+        help="Output directory root",
+    )
+    ap.add_argument(
+        "--per-video",
+        type=int,
+        default=24,
+        help="Max crops per video to include in mosaic",
+    )
+    ap.add_argument(
+        "--save-grid", action="store_true", help="Save per-video grid mosaics"
+    )
     ap.add_argument("--seed", type=int, default=0, help="Random seed for sampling")
     return ap.parse_args()
 
@@ -42,7 +59,9 @@ def ensure_dir(p: Path):
     p.mkdir(parents=True, exist_ok=True)
 
 
-def make_grid(images: List[np.ndarray], cols: int = 6, pad: int = 4) -> np.ndarray | None:
+def make_grid(
+    images: List[np.ndarray], cols: int = 6, pad: int = 4
+) -> np.ndarray | None:
     if not images:
         return None
     Hs = [im.shape[0] for im in images]
@@ -51,7 +70,11 @@ def make_grid(images: List[np.ndarray], cols: int = 6, pad: int = 4) -> np.ndarr
     W = int(np.median(Ws))
     resized = [cv2.resize(im, (W, H), interpolation=cv2.INTER_AREA) for im in images]
     rows = (len(resized) + cols - 1) // cols
-    grid = np.full((rows * H + (rows + 1) * pad, cols * W + (cols + 1) * pad, 3), 32, dtype=np.uint8)
+    grid = np.full(
+        (rows * H + (rows + 1) * pad, cols * W + (cols + 1) * pad, 3),
+        32,
+        dtype=np.uint8,
+    )
     k = 0
     for r in range(rows):
         for c in range(cols):
@@ -59,7 +82,7 @@ def make_grid(images: List[np.ndarray], cols: int = 6, pad: int = 4) -> np.ndarr
                 break
             y = r * H + (r + 1) * pad
             x = c * W + (c + 1) * pad
-            grid[y:y + H, x:x + W] = resized[k]
+            grid[y : y + H, x : x + W] = resized[k]
             k += 1
     return grid
 
@@ -100,7 +123,11 @@ def main() -> int:
             continue
         header, data = rows[0], rows[1:]
         # columns: [idx, frame_idx, time_s, x1,y1,x2,y2, score, label, crop_relpath]
-        crop_col = header.index("crop_relpath") if "crop_relpath" in header else (len(header) - 1)
+        crop_col = (
+            header.index("crop_relpath")
+            if "crop_relpath" in header
+            else (len(header) - 1)
+        )
         sizes = []
         images = []
         crop_paths: List[Path] = []
@@ -138,7 +165,9 @@ def main() -> int:
             "num_rows": len(data),
             "num_crops_found": len(images),
             "crops_dir": str(crops_dir) if crops_dir.exists() else None,
-            "avg_crop_size": (np.asarray(sizes).mean(axis=0).tolist() if sizes else None),  # [W, H]
+            "avg_crop_size": (
+                np.asarray(sizes).mean(axis=0).tolist() if sizes else None
+            ),  # [W, H]
         }
         global_stats["videos"].append(vstats)
 
@@ -148,7 +177,9 @@ def main() -> int:
     print(f"Audit done. Output: {out_root}")
     print(json.dumps(global_stats, indent=2))
     if global_stats["with_crops_saved"] == 0:
-        print("[HINT] No crops were saved. Re-run build_training_set.py with --save-crops to visually inspect training data.")
+        print(
+            "[HINT] No crops were saved. Re-run build_training_set.py with --save-crops to visually inspect training data."
+        )
     return 0
 
 

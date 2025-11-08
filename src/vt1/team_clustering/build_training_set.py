@@ -23,6 +23,7 @@ from tqdm import tqdm
 
 # Transformers (SigLIP)
 from transformers import AutoImageProcessor
+
 from vt1.config import settings
 
 
@@ -36,45 +37,112 @@ class DetResult:
 def parse_args() -> argparse.Namespace:
     cfg = settings()
     root = cfg.repo_root
-    ap = argparse.ArgumentParser("Build dataset: 1 FPS -> YOLO detection -> central crop -> SigLIP embeddings")
+    ap = argparse.ArgumentParser(
+        "Build dataset: 1 FPS -> YOLO detection -> central crop -> SigLIP embeddings"
+    )
 
     # Inputs
-    ap.add_argument("--videos-dir", type=str, default=str(cfg.training_videos_dir),
-                    help="Directory with input videos (*.mp4)")
-    ap.add_argument("--glob", type=str, default=str(cfg.videos_glob), help="Glob to match videos inside --videos-dir")
-    ap.add_argument("--videos", type=str, nargs="*", default=None,
-                    help="Explicit list of video files (overrides --videos-dir/--glob)")
+    ap.add_argument(
+        "--videos-dir",
+        type=str,
+        default=str(cfg.training_videos_dir),
+        help="Directory with input videos (*.mp4)",
+    )
+    ap.add_argument(
+        "--glob",
+        type=str,
+        default=str(cfg.videos_glob),
+        help="Glob to match videos inside --videos-dir",
+    )
+    ap.add_argument(
+        "--videos",
+        type=str,
+        nargs="*",
+        default=None,
+        help="Explicit list of video files (overrides --videos-dir/--glob)",
+    )
 
     # Detection (YOLO)
-    ap.add_argument("--yolo-model", type=str, default=str(cfg.yolo_model),
-                    help="Ultralytics YOLO model path/name")
-    ap.add_argument("--det-score-thr", type=float, default=float(cfg.det_score_thr_default), help="Score threshold for detections")
+    ap.add_argument(
+        "--yolo-model",
+        type=str,
+        default=str(cfg.yolo_model),
+        help="Ultralytics YOLO model path/name",
+    )
+    ap.add_argument(
+        "--det-score-thr",
+        type=float,
+        default=float(cfg.det_score_thr_default),
+        help="Score threshold for detections",
+    )
 
     # Sampling
-    ap.add_argument("--fps", type=float, default=float(cfg.build_fps), help="Target frames per second to sample (default 1 FPS)")
-    ap.add_argument("--max-seconds", type=int, default=0, help="Limit seconds per video (0=all)")
+    ap.add_argument(
+        "--fps",
+        type=float,
+        default=float(cfg.build_fps),
+        help="Target frames per second to sample (default 1 FPS)",
+    )
+    ap.add_argument(
+        "--max-seconds", type=int, default=0, help="Limit seconds per video (0=all)"
+    )
 
     # Central crop
-    ap.add_argument("--central-ratio", type=float, default=float(cfg.central_ratio_default),
-                    help="Fraction of bbox width/height to keep around center (0<r<=1)")
-    ap.add_argument("--min-crop-size", type=int, default=int(cfg.build_min_crop_size), help="Discard crops smaller than this (pixels)")
+    ap.add_argument(
+        "--central-ratio",
+        type=float,
+        default=float(cfg.central_ratio_default),
+        help="Fraction of bbox width/height to keep around center (0<r<=1)",
+    )
+    ap.add_argument(
+        "--min-crop-size",
+        type=int,
+        default=int(cfg.build_min_crop_size),
+        help="Discard crops smaller than this (pixels)",
+    )
 
     # SigLIP
-    ap.add_argument("--siglip", type=str, default=str(cfg.siglip_model),
-                    help="SigLIP Vision model with projection (HF id)")
-    ap.add_argument("--batch", type=int, default=int(cfg.build_batch_size), help="Embedding batch size")
+    ap.add_argument(
+        "--siglip",
+        type=str,
+        default=str(cfg.siglip_model),
+        help="SigLIP Vision model with projection (HF id)",
+    )
+    ap.add_argument(
+        "--batch",
+        type=int,
+        default=int(cfg.build_batch_size),
+        help="Embedding batch size",
+    )
 
     # Device
-    ap.add_argument("--device", type=str, default="cuda", choices=["cuda", "cpu"], help="Inference device")
+    ap.add_argument(
+        "--device",
+        type=str,
+        default="cuda",
+        choices=["cuda", "cpu"],
+        help="Inference device",
+    )
 
     # Outputs
     local_base = cfg.team_output_dir
-    ap.add_argument("--out-dir", type=str, default=str(local_base),
-                    help="Output directory root (default: outputs/team_clustering)")
-    ap.add_argument("--save-crops", action="store_true", help="Save crop images to disk")
+    ap.add_argument(
+        "--out-dir",
+        type=str,
+        default=str(local_base),
+        help="Output directory root (default: outputs/team_clustering)",
+    )
+    ap.add_argument(
+        "--save-crops", action="store_true", help="Save crop images to disk"
+    )
 
     # Misc
-    ap.add_argument("--seed", type=int, default=int(cfg.random_seed), help="Random seed for reproducibility")
+    ap.add_argument(
+        "--seed",
+        type=int,
+        default=int(cfg.random_seed),
+        help="Random seed for reproducibility",
+    )
     ap.add_argument("--verbose", action="store_true")
 
     return ap.parse_args()
@@ -147,7 +215,9 @@ class YOLODetector:
             self.model.to("cuda")
 
     def detect(self, img: np.ndarray, score_thr: float = 0.3) -> List[DetResult]:
-        res = self.model.predict(img, imgsz=640, conf=score_thr, device=self.device, verbose=False)[0]
+        res = self.model.predict(
+            img, imgsz=640, conf=score_thr, device=self.device, verbose=False
+        )[0]
         out: List[DetResult] = []
         if res.boxes is None or len(res.boxes) == 0:
             return out
@@ -160,13 +230,22 @@ class YOLODetector:
                 continue
             if int(lb) != 0:
                 continue
-            out.append(DetResult((float(bb[0]), float(bb[1]), float(bb[2]), float(bb[3])), float(sc), int(lb)))
+            out.append(
+                DetResult(
+                    (float(bb[0]), float(bb[1]), float(bb[2]), float(bb[3])),
+                    float(sc),
+                    int(lb),
+                )
+            )
         return out
 
 
 # ---------------- Cropping and embeddings ----------------
 
-def central_crop_from_bbox(img: np.ndarray, bbox: Tuple[float, float, float, float], ratio: float) -> np.ndarray | None:
+
+def central_crop_from_bbox(
+    img: np.ndarray, bbox: Tuple[float, float, float, float], ratio: float
+) -> np.ndarray | None:
     h, w = img.shape[:2]
     x1, y1, x2, y2 = bbox
     x1 = max(0.0, min(float(w - 1), x1))
@@ -200,6 +279,7 @@ class SigLIPEmbedder:
     def __init__(self, model_id: str, device: str = "cuda"):
         # Use SiglipVisionModel and take pooled_output as embedding
         from transformers.models.siglip import SiglipVisionModel  # type: ignore
+
         self.processor = AutoImageProcessor.from_pretrained(model_id)
         self.model = SiglipVisionModel.from_pretrained(model_id)
         self.device = device
@@ -236,11 +316,14 @@ class SigLIPEmbedder:
 
 # ---------------- Main pipeline ----------------
 
-def build_for_video(video_path: Path,
-                    detector,
-                    embedder: SigLIPEmbedder,
-                    args: argparse.Namespace,
-                    out_root: Path) -> Dict[str, Any]:
+
+def build_for_video(
+    video_path: Path,
+    detector,
+    embedder: SigLIPEmbedder,
+    args: argparse.Namespace,
+    out_root: Path,
+) -> Dict[str, Any]:
     video_stem = video_path.stem
     out_dir = out_root / video_stem
     ensure_dir(out_dir)
@@ -251,12 +334,16 @@ def build_for_video(video_path: Path,
     index_rows: List[List[Any]] = []
     embeddings: List[np.ndarray] = []
 
-    seconds_limit = args.max_seconds if args.max_seconds and args.max_seconds > 0 else None
+    seconds_limit = (
+        args.max_seconds if args.max_seconds and args.max_seconds > 0 else None
+    )
     pbar = tqdm(desc=f"{video_stem}", unit="sec", total=seconds_limit)
 
     sec_count = 0
     batch_crops: List[np.ndarray] = []
-    batch_meta: List[Tuple[int, float, Tuple[int, int, int, int], float, int]] = []  # frame_idx, sec, bbox_ints, score, local_id
+    batch_meta: List[Tuple[int, float, Tuple[int, int, int, int], float, int]] = (
+        []
+    )  # frame_idx, sec, bbox_ints, score, local_id
     next_crop_id = 0
 
     for frame_idx, sec, frame in iter_sampled_frames(video_path, args.fps):
@@ -279,8 +366,15 @@ def build_for_video(video_path: Path,
                 continue
             # Stash for batch embedding
             batch_crops.append(crop)
-            bx = (int(det.bbox[0]), int(det.bbox[1]), int(det.bbox[2]), int(det.bbox[3]))
-            batch_meta.append((int(frame_idx), float(sec), bx, float(det.score), int(det.label)))
+            bx = (
+                int(det.bbox[0]),
+                int(det.bbox[1]),
+                int(det.bbox[2]),
+                int(det.bbox[3]),
+            )
+            batch_meta.append(
+                (int(frame_idx), float(sec), bx, float(det.score), int(det.label))
+            )
 
             if len(batch_crops) >= args.batch:
                 embs = embedder.embed_batch(batch_crops)
@@ -298,7 +392,17 @@ def build_for_video(video_path: Path,
                         c = batch_crops[k]
                         cv2.imwrite(str(crop_path), c)
                         crop_rel = str(Path("crops") / crop_name)
-                    index_rows.append([len(index_rows), fidx, f"{s:.3f}", *bb, f"{sc:.4f}", lb, crop_rel if crop_rel else ""])
+                    index_rows.append(
+                        [
+                            len(index_rows),
+                            fidx,
+                            f"{s:.3f}",
+                            *bb,
+                            f"{sc:.4f}",
+                            lb,
+                            crop_rel if crop_rel else "",
+                        ]
+                    )
                 batch_crops.clear()
                 batch_meta.clear()
 
@@ -320,7 +424,17 @@ def build_for_video(video_path: Path,
                 # OpenCV expects BGR arrays; batch_crops[k] is BGR already
                 cv2.imwrite(str(crop_path), batch_crops[k])
                 crop_rel = str(Path("crops") / crop_name)
-            index_rows.append([len(index_rows), fidx, f"{s:.3f}", *bb, f"{sc:.4f}", lb, crop_rel if crop_rel else ""])
+            index_rows.append(
+                [
+                    len(index_rows),
+                    fidx,
+                    f"{s:.3f}",
+                    *bb,
+                    f"{sc:.4f}",
+                    lb,
+                    crop_rel if crop_rel else "",
+                ]
+            )
         batch_crops.clear()
         batch_meta.clear()
 
@@ -330,7 +444,9 @@ def build_for_video(video_path: Path,
     if embeddings:
         E = np.concatenate(embeddings, axis=0)
     else:
-        E = np.zeros((0, 1024), dtype=np.float32)  # unknown dim; will be replaced if empty
+        E = np.zeros(
+            (0, 1024), dtype=np.float32
+        )  # unknown dim; will be replaced if empty
 
     # If we had no crops, ensure correct dim by probing model config
     if E.shape[0] == 0:
@@ -347,7 +463,20 @@ def build_for_video(video_path: Path,
     # Write index.csv
     with (out_dir / "index.csv").open("w", newline="", encoding="utf-8") as f:
         writer = csv.writer(f)
-        writer.writerow(["idx", "frame_idx", "time_s", "x1", "y1", "x2", "y2", "score", "label", "crop_relpath"])
+        writer.writerow(
+            [
+                "idx",
+                "frame_idx",
+                "time_s",
+                "x1",
+                "y1",
+                "x2",
+                "y2",
+                "score",
+                "label",
+                "crop_relpath",
+            ]
+        )
         writer.writerows(index_rows)
 
     return {
@@ -378,7 +507,9 @@ def main() -> int:
         videos = sorted(Path(args.videos_dir).glob(args.glob))
     videos = [v for v in videos if v.suffix.lower() in {".mp4", ".avi", ".mov", ".mkv"}]
     if not videos:
-        print(f"[ERROR] No videos found. Checked: --videos {args.videos} or {args.videos_dir} / {args.glob}")
+        print(
+            f"[ERROR] No videos found. Checked: --videos {args.videos} or {args.videos_dir} / {args.glob}"
+        )
         return 1
 
     # Initialize YOLO detector

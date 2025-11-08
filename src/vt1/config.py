@@ -1,9 +1,10 @@
 from __future__ import annotations
+
+import os
+import threading
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict
-import os
-import threading
 
 try:
     import tomllib  # Python 3.11+
@@ -12,6 +13,7 @@ except Exception:  # pragma: no cover
 
 try:  # optional .env support
     from dotenv import load_dotenv  # type: ignore
+
     load_dotenv()
 except Exception:
     pass
@@ -26,6 +28,7 @@ class Config:
     models_dir: Path
     pose_model: Path
     yolo_model: Path
+    default_video_source: Path
     team_models_dir: Path
     pipeline_output_dir: Path
     team_output_dir: Path
@@ -59,7 +62,12 @@ class Config:
     save_models_default: bool
 
     def ensure_dirs(self) -> None:
-        for p in [self.models_dir, self.team_models_dir, self.pipeline_output_dir, self.team_output_dir]:
+        for p in [
+            self.models_dir,
+            self.team_models_dir,
+            self.pipeline_output_dir,
+            self.team_output_dir,
+        ]:
             try:
                 p.mkdir(parents=True, exist_ok=True)
             except Exception:
@@ -69,7 +77,7 @@ class Config:
 def _repo_root() -> Path:
     here = Path(__file__).resolve()
     for parent in [here] + list(here.parents):
-        if (parent / 'pyproject.toml').exists():
+        if (parent / "pyproject.toml").exists():
             return parent
     return Path.cwd()
 
@@ -77,12 +85,12 @@ def _repo_root() -> Path:
 def _read_toml(path: Path) -> Dict[str, Any]:
     if not path.exists():
         return {}
-    with path.open('rb') as f:
+    with path.open("rb") as f:
         return tomllib.load(f)
 
 
 def _env_override(key: str, current: Any) -> Any:
-    env_key = 'VT1_' + key.upper()
+    env_key = "VT1_" + key.upper()
     val = os.getenv(env_key)
     return val if val is not None else current
 
@@ -91,50 +99,54 @@ def _coerce_paths(repo_root: Path, raw: Dict[str, Any]) -> Dict[str, Any]:
     def rp(v: str) -> Path:
         p = Path(v)
         return p if p.is_absolute() else (repo_root / p)
+
     out: Dict[str, Any] = {}
-    out['repo_root'] = repo_root
-    out['models_dir'] = rp(raw.get('models_dir', 'models'))
-    out['pose_model'] = rp(raw.get('pose_model', 'models/yolo11x-pose.pt'))
-    out['yolo_model'] = rp(raw.get('yolo_model', 'models/yolo11n.pt'))
-    out['team_models_dir'] = rp(raw.get('team_models_dir', 'models/team_clustering'))
-    out['pipeline_output_dir'] = rp(raw.get('pipeline_output_dir', 'outputs'))
-    out['team_output_dir'] = rp(raw.get('team_output_dir', 'outputs/team_clustering'))
-    out['log_level'] = str(raw.get('log_level', 'INFO'))
+    out["repo_root"] = repo_root
+    out["models_dir"] = rp(raw.get("models_dir", "models"))
+    out["pose_model"] = rp(raw.get("pose_model", "models/yolo11x-pose.pt"))
+    out["yolo_model"] = rp(raw.get("yolo_model", "models/yolo11n.pt"))
+    out["default_video_source"] = rp(raw.get("default_video_source", "data_hockey.mp4"))
+    out["team_models_dir"] = rp(raw.get("team_models_dir", "models/team_clustering"))
+    out["pipeline_output_dir"] = rp(raw.get("pipeline_output_dir", "outputs"))
+    out["team_output_dir"] = rp(raw.get("team_output_dir", "outputs/team_clustering"))
+    out["log_level"] = str(raw.get("log_level", "INFO"))
     # Shared defaults coercion
-    out['yolo_conf'] = float(raw.get('yolo_conf', 0.30))
-    out['yolo_imgsz'] = int(raw.get('yolo_imgsz', 640))
-    out['central_ratio_default'] = float(raw.get('central_ratio_default', 0.6))
-    out['siglip_model'] = str(raw.get('siglip_model', 'google/siglip-base-patch16-224'))
-    out['training_videos_dir'] = rp(raw.get('training_videos_dir', 'videos_all/CAR_vs_NYR'))
-    out['videos_glob'] = str(raw.get('videos_glob', '*.mp4'))
-    out['build_fps'] = float(raw.get('build_fps', 1.0))
-    out['build_min_crop_size'] = int(raw.get('build_min_crop_size', 32))
-    out['build_batch_size'] = int(raw.get('build_batch_size', 64))
-    out['det_score_thr_default'] = float(raw.get('det_score_thr_default', 0.30))
-    out['cluster_k'] = int(raw.get('cluster_k', 2))
-    out['umap_dim'] = int(raw.get('umap_dim', 16))
-    out['umap_neighbors'] = int(raw.get('umap_neighbors', 15))
-    out['umap_metric'] = str(raw.get('umap_metric', 'cosine'))
-    out['umap_min_dist'] = float(raw.get('umap_min_dist', 0.1))
-    out['random_seed'] = int(raw.get('random_seed', 0))
-    out['eval_frame_step'] = int(raw.get('eval_frame_step', 30))
-    out['eval_limit_images'] = int(raw.get('eval_limit_images', 50))
-    out['yolo_max_boxes'] = int(raw.get('yolo_max_boxes', 8))
+    out["yolo_conf"] = float(raw.get("yolo_conf", 0.30))
+    out["yolo_imgsz"] = int(raw.get("yolo_imgsz", 640))
+    out["central_ratio_default"] = float(raw.get("central_ratio_default", 0.6))
+    out["siglip_model"] = str(raw.get("siglip_model", "google/siglip-base-patch16-224"))
+    out["training_videos_dir"] = rp(
+        raw.get("training_videos_dir", "videos_all/CAR_vs_NYR")
+    )
+    out["videos_glob"] = str(raw.get("videos_glob", "*.mp4"))
+    out["build_fps"] = float(raw.get("build_fps", 1.0))
+    out["build_min_crop_size"] = int(raw.get("build_min_crop_size", 32))
+    out["build_batch_size"] = int(raw.get("build_batch_size", 64))
+    out["det_score_thr_default"] = float(raw.get("det_score_thr_default", 0.30))
+    out["cluster_k"] = int(raw.get("cluster_k", 2))
+    out["umap_dim"] = int(raw.get("umap_dim", 16))
+    out["umap_neighbors"] = int(raw.get("umap_neighbors", 15))
+    out["umap_metric"] = str(raw.get("umap_metric", "cosine"))
+    out["umap_min_dist"] = float(raw.get("umap_min_dist", 0.1))
+    out["random_seed"] = int(raw.get("random_seed", 0))
+    out["eval_frame_step"] = int(raw.get("eval_frame_step", 30))
+    out["eval_limit_images"] = int(raw.get("eval_limit_images", 50))
+    out["yolo_max_boxes"] = int(raw.get("yolo_max_boxes", 8))
     # SAM2 defaults coercion
-    out['sam_every'] = int(raw.get('sam_every', 1))
-    out['sam_topk'] = int(raw.get('sam_topk', 10))
-    out['sam_reinit'] = int(raw.get('sam_reinit', 0))
-    out['empty_cache_interval'] = int(raw.get('empty_cache_interval', 0))
+    out["sam_every"] = int(raw.get("sam_every", 1))
+    out["sam_topk"] = int(raw.get("sam_topk", 10))
+    out["sam_reinit"] = int(raw.get("sam_reinit", 0))
+    out["empty_cache_interval"] = int(raw.get("empty_cache_interval", 0))
     # Clustering behavior defaults
-    out['save_models_default'] = bool(raw.get('save_models_default', True))
+    out["save_models_default"] = bool(raw.get("save_models_default", True))
     return out
 
 
 def _load() -> Config:
     repo = _repo_root()
     print(repo)
-    defaults = _read_toml(repo / 'config_defaults.toml')
-    local = _read_toml(repo / 'config_local.toml')
+    defaults = _read_toml(repo / "config_defaults.toml")
+    local = _read_toml(repo / "config_local.toml")
     merged: Dict[str, Any] = {**defaults, **local}
     # env overrides
     for k in list(merged.keys()):

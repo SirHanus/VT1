@@ -1,7 +1,9 @@
 from __future__ import annotations
-from typing import Optional
-from pathlib import Path
+
 import sys
+from pathlib import Path
+from typing import Optional
+
 from PyQt6 import QtWidgets
 
 
@@ -23,18 +25,21 @@ class HelpTab(QtWidgets.QWidget):
         # 3. Relative to executable
 
         # Check if running as PyInstaller bundle
-        if getattr(sys, 'frozen', False) and hasattr(sys, '_MEIPASS'):
+        if getattr(sys, "frozen", False) and hasattr(sys, "_MEIPASS"):
             # Running in PyInstaller bundle
             bundle_dir = Path(sys._MEIPASS)
-            gui_md = bundle_dir / 'GUI.md'
-            readme = bundle_dir / 'README.md'
-            return (gui_md if gui_md.exists() else None, readme if readme.exists() else None)
+            gui_md = bundle_dir / "GUI.md"
+            readme = bundle_dir / "README.md"
+            return (
+                gui_md if gui_md.exists() else None,
+                readme if readme.exists() else None,
+            )
 
         # Development mode: find repo root by looking for pyproject.toml
         current = Path(__file__).resolve()
         root = None
         for parent in [current] + list(current.parents):
-            if (parent / 'pyproject.toml').exists():
+            if (parent / "pyproject.toml").exists():
                 root = parent
                 break
 
@@ -42,15 +47,20 @@ class HelpTab(QtWidgets.QWidget):
             # Fallback: assume parents[2] (works in some cases)
             root = Path(__file__).resolve().parents[2]
 
-        gui_md = root / 'GUI.md'
-        readme = root / 'README.md'
-        return (gui_md if gui_md.exists() else None, readme if readme.exists() else None)
+        gui_md = root / "GUI.md"
+        readme = root / "README.md"
+        return (
+            gui_md if gui_md.exists() else None,
+            readme if readme.exists() else None,
+        )
 
     def _load_readme_into_viewer(self):
         gui_md, readme = self._find_docs()
         target = gui_md or readme
         if not target:
-            self.viewer.setPlainText("GUI.md/README.md not found. Keep docs at repo root.")
+            self.viewer.setPlainText(
+                "GUI.md/README.md not found. Keep docs at repo root."
+            )
             return
 
         # Set search paths so relative links work
@@ -58,10 +68,10 @@ class HelpTab(QtWidgets.QWidget):
             self.viewer.setSearchPaths([str(target.parent)])
 
         try:
-            text = target.read_text(encoding='utf-8')
+            text = target.read_text(encoding="utf-8")
         except Exception:
             try:
-                text = target.read_text(errors='ignore')
+                text = target.read_text(errors="ignore")
             except Exception:
                 self.viewer.setPlainText(f"Failed to read {target}")
                 return
@@ -76,7 +86,8 @@ class HelpTab(QtWidgets.QWidget):
         html = None
         try:
             import markdown  # type: ignore
-            html = markdown.markdown(text, extensions=['fenced_code', 'tables'])
+
+            html = markdown.markdown(text, extensions=["fenced_code", "tables"])
         except Exception:
             html = None
         if html:

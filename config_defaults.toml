@@ -1,7 +1,8 @@
 # Default configuration for VT1 (edit config_local.toml to override)
 models_dir = "models"                           # Root folder where model files live; other model paths are resolved relative to this
 pose_model = "models/yolo11x-pose.pt"            # Default YOLO pose model used in the pipeline for keypoints; change to switch pose backbone
-yolo_model = "models/yolo11n.pt"                 # Default YOLO detection model (used in team clustering and eval); change to alter detector size/accuracy
+yolo_model = "models/yolo11x.pt"                 # Default YOLO detection model (used in team clustering and eval); change to alter detector size/accuracy
+default_video_source = "data_hockey_colored.mp4"         # Default video file used in GUI and scripts; change to your preferred test video
 # Trained team clustering models (umap.pkl, kmeans.pkl) default to outputs
 team_models_dir = "models/team_clustering"       # Folder where UMAP/KMeans .pkl are saved/loaded; clustering saves here, eval/pipeline read from here
 # Root-level outputs folder
@@ -35,12 +36,12 @@ random_seed = 0                                    # Global seed for reproducibl
 save_models_default = true                         # Whether to persist UMAP/KMeans models by default during clustering; true recommended for pipeline use
 
 # Evaluation defaults
-eval_frame_step = 30                               # Sample one frame every N frames when evaluating on videos; lower = more frames, slower
+eval_frame_step = 5                              # Sample one frame every N frames when evaluating on videos; lower = more frames, slower
 eval_limit_images = 50                             # Max number of annotated images to save per eval run; prevents dumping too many files
-yolo_max_boxes = 8                                 # Max boxes to annotate per image/frame in eval; limits clutter and speeds up drawing
+yolo_max_boxes = 12                                 # Max boxes to annotate per image/frame in eval; limits clutter and speeds up drawing
 
 # Pipeline SAM2 defaults
 sam_every = 1                                      # Run SAM segmentation every N frames; higher = faster but less smooth masks
 sam_topk = 10                                      # Limit SAM to top-K detection boxes per frame; lower = faster SAM processing
 sam_reinit = 60                                    # Re-initialize SAM2 state every N frames to prevent drift (0=never); helps with long videos
-empty_cache_interval = 25                          # Call torch.cuda.empty_cache() every N frames on CUDA (0=never); reduces memory fragmentation
+empty_cache_interval = 60                         # Call torch.cuda.empty_cache() every N frames on CUDA (0=never); reduces memory fragmentation

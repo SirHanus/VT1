@@ -1,7 +1,9 @@
 """
 Startup dialog offering to run the full training workflow with defaults.
 """
+
 from __future__ import annotations
+
 import sys
 from typing import Optional
 
@@ -186,46 +188,70 @@ class TrainingWorkflowRunner(QtWidgets.QWidget):
             return
 
         step_name = self.steps[step_idx]
-        self.lbl_step.setText(f"Step {step_idx + 1}/{len(self.steps)}: {self._step_label(step_name)}...")
+        self.lbl_step.setText(
+            f"Step {step_idx + 1}/{len(self.steps)}: {self._step_label(step_name)}..."
+        )
 
         cfg = settings()
 
         if step_name == "build":
             module = "vt1.team_clustering.build_training_set"
             args = [
-                "--videos-dir", str(cfg.training_videos_dir),
-                "--glob", cfg.videos_glob,
-                "--fps", str(cfg.build_fps),
-                "--out-dir", str(cfg.team_output_dir),
-                "--min-crop-size", str(cfg.build_min_crop_size),
-                "--batch", str(cfg.build_batch_size),  # Fixed: --batch not --batch-size
-                "--central-ratio", str(cfg.central_ratio_default),
-                "--siglip", str(cfg.siglip_model),
-                "--device", "cuda",
-                "--yolo-model", str(cfg.yolo_model),
+                "--videos-dir",
+                str(cfg.training_videos_dir),
+                "--glob",
+                cfg.videos_glob,
+                "--fps",
+                str(cfg.build_fps),
+                "--out-dir",
+                str(cfg.team_output_dir),
+                "--min-crop-size",
+                str(cfg.build_min_crop_size),
+                "--batch",
+                str(cfg.build_batch_size),  # Fixed: --batch not --batch-size
+                "--central-ratio",
+                str(cfg.central_ratio_default),
+                "--siglip",
+                str(cfg.siglip_model),
+                "--device",
+                "cuda",
+                "--yolo-model",
+                str(cfg.yolo_model),
             ]
         elif step_name == "cluster":
             module = "vt1.team_clustering.cluster_umap_kmeans"
             args = [
-                "--in-root", str(cfg.team_output_dir),
-                "--out-dir", str(cfg.team_output_dir),
-                "--models-dir", str(cfg.team_models_dir),
-                "--k", str(cfg.cluster_k),
-                "--umap-dim", str(cfg.umap_dim),
-                "--umap-neighbors", str(cfg.umap_neighbors),
-                "--umap-metric", cfg.umap_metric,
-                "--umap-min-dist", str(cfg.umap_min_dist),
-                "--seed", str(cfg.random_seed),
+                "--in-root",
+                str(cfg.team_output_dir),
+                "--out-dir",
+                str(cfg.team_output_dir),
+                "--models-dir",
+                str(cfg.team_models_dir),
+                "--k",
+                str(cfg.cluster_k),
+                "--umap-dim",
+                str(cfg.umap_dim),
+                "--umap-neighbors",
+                str(cfg.umap_neighbors),
+                "--umap-metric",
+                cfg.umap_metric,
+                "--umap-min-dist",
+                str(cfg.umap_min_dist),
+                "--seed",
+                str(cfg.random_seed),
                 "--save-models",
             ]
         elif step_name == "pipeline":
             # Run pipeline demo on first video found in training_videos_dir
             from pathlib import Path
+
             videos_dir = Path(cfg.training_videos_dir)
             video_files = sorted(videos_dir.glob(cfg.videos_glob))
 
             if not video_files:
-                self._log(f"[ERROR] No videos found in {videos_dir} matching {cfg.videos_glob}\n")
+                self._log(
+                    f"[ERROR] No videos found in {videos_dir} matching {cfg.videos_glob}\n"
+                )
                 self._on_complete(False)
                 return
 
@@ -234,17 +260,27 @@ class TrainingWorkflowRunner(QtWidgets.QWidget):
 
             module = "vt1.pipeline.sam_offline"
             args = [
-                "--source", str(first_video),
-                "--pose-model", str(cfg.pose_model),
-                "--device", "cuda",
-                "--imgsz", str(cfg.yolo_imgsz),
-                "--conf", str(cfg.yolo_conf),
-                "--max-frames", "300",  # Limit to 300 frames for demo (10 sec at 30fps)
+                "--source",
+                str(first_video),
+                "--pose-model",
+                str(cfg.pose_model),
+                "--device",
+                "cuda",
+                "--imgsz",
+                str(cfg.yolo_imgsz),
+                "--conf",
+                str(cfg.yolo_conf),
+                "--max-frames",
+                "300",  # Limit to 300 frames for demo (10 sec at 30fps)
                 "--no-sam",  # Disable SAM for faster demo
-                "--team-models", str(cfg.team_models_dir),
-                "--siglip", str(cfg.siglip_model),
-                "--central-ratio", str(cfg.central_ratio_default),
-                "--out-dir", str(cfg.pipeline_output_dir),
+                "--team-models",
+                str(cfg.team_models_dir),
+                "--siglip",
+                str(cfg.siglip_model),
+                "--central-ratio",
+                str(cfg.central_ratio_default),
+                "--out-dir",
+                str(cfg.pipeline_output_dir),
             ]
         else:
             self._log(f"[ERROR] Unknown step: {step_name}\n")
@@ -261,9 +297,13 @@ class TrainingWorkflowRunner(QtWidgets.QWidget):
         self._log(f"[CMD] {py} {' '.join(full_args)}\n\n")
 
         self.proc = QtCore.QProcess(self)
-        self.proc.setProcessChannelMode(QtCore.QProcess.ProcessChannelMode.MergedChannels)
+        self.proc.setProcessChannelMode(
+            QtCore.QProcess.ProcessChannelMode.MergedChannels
+        )
         self.proc.readyReadStandardOutput.connect(self._on_output)
-        self.proc.finished.connect(lambda code, status: self._on_step_finished(step_idx, code, status))
+        self.proc.finished.connect(
+            lambda code, status: self._on_step_finished(step_idx, code, status)
+        )
 
         self.proc.start(py, full_args)
         if not self.proc.waitForStarted(5000):
@@ -292,7 +332,9 @@ class TrainingWorkflowRunner(QtWidgets.QWidget):
     def _on_step_finished(self, step_idx: int, code: int, status):
         step_name = self.steps[step_idx]
         if code != 0:
-            self._log(f"\n[ERROR] {self._step_label(step_name)} failed with exit code {code}\n")
+            self._log(
+                f"\n[ERROR] {self._step_label(step_name)} failed with exit code {code}\n"
+            )
             self._on_complete(False)
             return
 

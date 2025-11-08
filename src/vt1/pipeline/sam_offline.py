@@ -36,8 +36,9 @@ except Exception:
     _HAS_SIGLIP = False
 
 
-def central_crop_from_bbox(img: np.ndarray, bbox: Tuple[float, float, float, float], ratio: float = 0.6) -> Optional[
-    np.ndarray]:
+def central_crop_from_bbox(
+    img: np.ndarray, bbox: Tuple[float, float, float, float], ratio: float = 0.6
+) -> Optional[np.ndarray]:
     h, w = img.shape[:2]
     x1, y1, x2, y2 = bbox
     x1 = max(0.0, min(float(w - 1), x1))
@@ -87,11 +88,15 @@ class TeamClusteringInfer:
         self.model.eval()
 
     @torch.inference_mode()
-    def predict_labels(self, frame: np.ndarray, boxes_xyxy: List[List[float]], central_ratio: float) -> List[int]:
+    def predict_labels(
+        self, frame: np.ndarray, boxes_xyxy: List[List[float]], central_ratio: float
+    ) -> List[int]:
         crops = []
         idxs = []
         for i, bb in enumerate(boxes_xyxy):
-            crop = central_crop_from_bbox(frame, (bb[0], bb[1], bb[2], bb[3]), central_ratio)
+            crop = central_crop_from_bbox(
+                frame, (bb[0], bb[1], bb[2], bb[3]), central_ratio
+            )
             if crop is None:
                 continue
             if crop.ndim == 2:
@@ -102,10 +107,14 @@ class TeamClusteringInfer:
             idxs.append(i)
         if not crops:
             return [-1] * len(boxes_xyxy)
-        inputs = self.processor(images=[cv2.cvtColor(c, cv2.COLOR_RGB2BGR)[..., ::-1] for c in crops],
-                                return_tensors="pt")
+        inputs = self.processor(
+            images=[cv2.cvtColor(c, cv2.COLOR_RGB2BGR)[..., ::-1] for c in crops],
+            return_tensors="pt",
+        )
         # Note: crops are already RGB above, converting back/forth to be robust to processor expectations
-        px = self.processor(images=crops, return_tensors="pt")["pixel_values"].to(self.device)
+        px = self.processor(images=crops, return_tensors="pt")["pixel_values"].to(
+            self.device
+        )
         out = self.model(pixel_values=px)
         if hasattr(out, "pooler_output") and out.pooler_output is not None:
             emb = out.pooler_output
@@ -124,17 +133,31 @@ class TeamClusteringInfer:
 
 # COCO keypoint skeleton pairs (17-keypoint format)
 COCO_SKELETON: List[Tuple[int, int]] = [
-    (0, 1), (1, 3), (0, 2), (2, 4),
-    (5, 6), (5, 7), (7, 9), (6, 8), (8, 10),
-    (11, 12), (11, 13), (13, 15), (12, 14), (14, 16),
-    (5, 11), (6, 12)
+    (0, 1),
+    (1, 3),
+    (0, 2),
+    (2, 4),
+    (5, 6),
+    (5, 7),
+    (7, 9),
+    (6, 8),
+    (8, 10),
+    (11, 12),
+    (11, 13),
+    (13, 15),
+    (12, 14),
+    (14, 16),
+    (5, 11),
+    (6, 12),
 ]
 
 # Two team colors default; fallback colors if k>2
 TEAM_COLORS = [
     (255, 0, 0),  # Team 0 - Blue-ish (BGR)
     (0, 165, 255),  # Team 1 - Orange-ish (BGR)
-    (50, 205, 50), (255, 105, 180), (255, 215, 0)
+    (50, 205, 50),
+    (255, 105, 180),
+    (255, 215, 0),
 ]
 
 
@@ -145,36 +168,125 @@ def color_for_team(label: int) -> Tuple[int, int, int]:
 
 
 def draw_text(img, text, x, y, scale=0.6, color=(255, 255, 255), thickness=1):
-    cv2.putText(img, text, (x, y), cv2.FONT_HERSHEY_SIMPLEX, scale, (0, 0, 0), thickness + 2, cv2.LINE_AA)
-    cv2.putText(img, text, (x, y), cv2.FONT_HERSHEY_SIMPLEX, scale, color, thickness, cv2.LINE_AA)
+    cv2.putText(
+        img,
+        text,
+        (x, y),
+        cv2.FONT_HERSHEY_SIMPLEX,
+        scale,
+        (0, 0, 0),
+        thickness + 2,
+        cv2.LINE_AA,
+    )
+    cv2.putText(
+        img,
+        text,
+        (x, y),
+        cv2.FONT_HERSHEY_SIMPLEX,
+        scale,
+        color,
+        thickness,
+        cv2.LINE_AA,
+    )
 
 
 def parse_args():
     cfg = settings()
-    ap = argparse.ArgumentParser("POC: YOLO pose + SAM2 segmentation on data_hockey.mp4 (optimized)")
-    ap.add_argument("--source", type=str, default=str(cfg.repo_root / "data_hockey_colored.mp4"), help="Video source path")
-    ap.add_argument("--pose-model", type=str, default=str(cfg.pose_model),
-                    help="Ultralytics YOLO pose model path/name")
-    ap.add_argument("--sam2", type=str, default="facebook/sam2-hiera-large", help="HF SAM2 model id")
+    ap = argparse.ArgumentParser(
+        "POC: YOLO pose + SAM2 segmentation on data_hockey.mp4 (optimized)"
+    )
+    ap.add_argument(
+        "--source",
+        type=str,
+        default=str(cfg.default_video_source),
+        help="Video source path",
+    )
+    ap.add_argument(
+        "--pose-model",
+        type=str,
+        default=str(cfg.pose_model),
+        help="Ultralytics YOLO pose model path/name",
+    )
+    ap.add_argument(
+        "--sam2", type=str, default="facebook/sam2-hiera-large", help="HF SAM2 model id"
+    )
     ap.add_argument("--device", type=str, default="cuda", help="'cuda' or 'cpu'")
-    ap.add_argument("--imgsz", type=int, default=int(cfg.yolo_imgsz), help="YOLO inference size")
-    ap.add_argument("--conf", type=float, default=float(cfg.yolo_conf), help="YOLO confidence threshold")
-    ap.add_argument("--max-frames", type=int, default=0, help="Process at most N frames (0 = all)")
+    ap.add_argument(
+        "--imgsz", type=int, default=int(cfg.yolo_imgsz), help="YOLO inference size"
+    )
+    ap.add_argument(
+        "--conf",
+        type=float,
+        default=float(cfg.yolo_conf),
+        help="YOLO confidence threshold",
+    )
+    ap.add_argument(
+        "--max-frames", type=int, default=0, help="Process at most N frames (0 = all)"
+    )
     ap.add_argument("--show", action="store_true", help="Show a live window")
-    ap.add_argument("--no-sam", action="store_true", help="Disable SAM and only draw pose (faster)")
+    ap.add_argument(
+        "--no-sam", action="store_true", help="Disable SAM and only draw pose (faster)"
+    )
     ap.add_argument("--half", action="store_true", help="Use FP16 for YOLO on CUDA")
-    ap.add_argument("--sam-every", type=int, default=int(cfg.sam_every), help="Run SAM every N frames (1=every frame)")
-    ap.add_argument("--sam-topk", type=int, default=int(cfg.sam_topk), help="Limit SAM to top-K boxes per frame")
-    ap.add_argument("--sam-reinit", type=int, default=int(cfg.sam_reinit), help="Re-init SAM2 every N frames (0=never)")
-    ap.add_argument("--empty-cache-interval", type=int, default=int(cfg.empty_cache_interval),
-                    help="Call torch.cuda.empty_cache() every N frames on CUDA (0=never)")
-    ap.add_argument("--metrics-json", type=str, default="", help="If set, write per-run metrics JSON to this path")
-    ap.add_argument("--team-models", type=str, default=str(cfg.team_models_dir),
-                    help="Directory containing umap.pkl and kmeans.pkl")
-    ap.add_argument("--siglip", type=str, default=str(cfg.siglip_model), help="SigLIP model id (vision)")
-    ap.add_argument("--central-ratio", type=float, default=float(cfg.central_ratio_default), help="Central crop ratio for team inference")
-    ap.add_argument("--disable-team", action="store_true", help="Disable team coloring even if models are present")
-    ap.add_argument("--out-dir", type=str, default=str(cfg.pipeline_output_dir), help="Override output directory root")
+    ap.add_argument(
+        "--sam-every",
+        type=int,
+        default=int(cfg.sam_every),
+        help="Run SAM every N frames (1=every frame)",
+    )
+    ap.add_argument(
+        "--sam-topk",
+        type=int,
+        default=int(cfg.sam_topk),
+        help="Limit SAM to top-K boxes per frame",
+    )
+    ap.add_argument(
+        "--sam-reinit",
+        type=int,
+        default=int(cfg.sam_reinit),
+        help="Re-init SAM2 every N frames (0=never)",
+    )
+    ap.add_argument(
+        "--empty-cache-interval",
+        type=int,
+        default=int(cfg.empty_cache_interval),
+        help="Call torch.cuda.empty_cache() every N frames on CUDA (0=never)",
+    )
+    ap.add_argument(
+        "--metrics-json",
+        type=str,
+        default="",
+        help="If set, write per-run metrics JSON to this path",
+    )
+    ap.add_argument(
+        "--team-models",
+        type=str,
+        default=str(cfg.team_models_dir),
+        help="Directory containing umap.pkl and kmeans.pkl",
+    )
+    ap.add_argument(
+        "--siglip",
+        type=str,
+        default=str(cfg.siglip_model),
+        help="SigLIP model id (vision)",
+    )
+    ap.add_argument(
+        "--central-ratio",
+        type=float,
+        default=float(cfg.central_ratio_default),
+        help="Central crop ratio for team inference",
+    )
+    ap.add_argument(
+        "--disable-team",
+        action="store_true",
+        help="Disable team coloring even if models are present",
+    )
+    ap.add_argument(
+        "--out-dir",
+        type=str,
+        default=str(cfg.pipeline_output_dir),
+        help="Override output directory root",
+    )
     return ap.parse_args()
 
 
@@ -187,15 +299,20 @@ def _build_out_path(args) -> Path:
     sam_enabled = not args.no_sam
     date_str = datetime.now().strftime("%Y%m%d")
     tokens = [date_str, stem, "pose"]
-    if sam_enabled: tokens.append("sam")
+    if sam_enabled:
+        tokens.append("sam")
     tokens.append(args.device)
-    if args.device == "cuda" and args.half: tokens.append("fp16")
+    if args.device == "cuda" and args.half:
+        tokens.append("fp16")
     tokens += [f"img{args.imgsz}", f"c{conf_pct}"]
     if sam_enabled:
         tokens += [f"se{max(1,int(args.sam_every))}", f"sk{max(0,int(args.sam_topk))}"]
-        if args.sam_reinit and int(args.sam_reinit) > 0: tokens.append(f"sr{int(args.sam_reinit)}")
-    if not args.disable_team: tokens.append("teams")
-    if args.max_frames and int(args.max_frames) > 0: tokens.append(f"n{int(args.max_frames)}")
+        if args.sam_reinit and int(args.sam_reinit) > 0:
+            tokens.append(f"sr{int(args.sam_reinit)}")
+    if not args.disable_team:
+        tokens.append("teams")
+    if args.max_frames and int(args.max_frames) > 0:
+        tokens.append(f"n{int(args.max_frames)}")
     return base / ("_".join(tokens) + ".mp4")
 
 
@@ -227,7 +344,9 @@ def main():
     team_infer: Optional[TeamClusteringInfer] = None
     if not args.disable_team:
         try:
-            team_infer = TeamClusteringInfer(models_dir=Path(args.team_models), siglip_id=args.siglip, device=device)
+            team_infer = TeamClusteringInfer(
+                models_dir=Path(args.team_models), siglip_id=args.siglip, device=device
+            )
         except Exception as e:
             print(f"[WARN] Team clustering inference disabled: {e}")
             team_infer = None
@@ -264,7 +383,9 @@ def main():
     # Init SAM2 (optional)
     sam2 = None
     if not args.no_sam:
-        sam2 = init_sam2(args.sam2, device=device, prefer_half=(args.half and device == "cuda"))
+        sam2 = init_sam2(
+            args.sam2, device=device, prefer_half=(args.half and device == "cuda")
+        )
 
     # Prepare writer
     # Always auto-generate output path now (previously respected --out)
@@ -291,7 +412,11 @@ def main():
     total_frames = total_frames_raw if total_frames_raw > 0 else None
     effective_total = None
     if args.max_frames and args.max_frames > 0:
-        effective_total = min(total_frames, args.max_frames) if total_frames is not None else args.max_frames
+        effective_total = (
+            min(total_frames, args.max_frames)
+            if total_frames is not None
+            else args.max_frames
+        )
     else:
         effective_total = total_frames
     pbar = tqdm(total=effective_total, desc="Processing", unit="frame")
@@ -315,7 +440,9 @@ def main():
             gc.collect()
             if device == "cuda":
                 torch.cuda.empty_cache()
-            sam2_local = init_sam2(args.sam2, device=device, prefer_half=(args.half and device == "cuda"))
+            sam2_local = init_sam2(
+                args.sam2, device=device, prefer_half=(args.half and device == "cuda")
+            )
             sam2 = sam2_local
 
     # Main loop
@@ -358,14 +485,20 @@ def main():
         else:
             conf = None
 
-        if hasattr(res, "keypoints") and res.keypoints is not None and len(res.keypoints) > 0:
+        if (
+            hasattr(res, "keypoints")
+            and res.keypoints is not None
+            and len(res.keypoints) > 0
+        ):
             kpts = res.keypoints.data.detach().cpu().numpy()  # (N, K, 3)
 
         # Determine team labels for current boxes (if models loaded)
         team_labels = None
         if team_infer is not None and boxes:
             try:
-                team_labels = team_infer.predict_labels(frame, boxes, central_ratio=float(args.central_ratio))
+                team_labels = team_infer.predict_labels(
+                    frame, boxes, central_ratio=float(args.central_ratio)
+                )
             except Exception as e:
                 print(f"[WARN] Team inference error at frame {frame_idx}: {e}")
                 team_labels = None
@@ -388,11 +521,17 @@ def main():
                         mask = (mask > 0).astype(np.uint8)
                     if mask.sum() == 0:
                         continue
-                    color = color_for_team(team_labels[oid] if (team_labels and oid < len(team_labels)) else -1)
+                    color = color_for_team(
+                        team_labels[oid]
+                        if (team_labels and oid < len(team_labels))
+                        else -1
+                    )
                     # Fill the mask area with team color on overlay
                     overlay[mask > 0] = color
                     # Draw contour outline
-                    contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+                    contours, _ = cv2.findContours(
+                        mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE
+                    )
                     cv2.drawContours(vis, contours, -1, color, thickness=2)
                 # Blend overlay with original frame (alpha=0.4 means 40% color, 60% original)
                 alpha = 0.25
@@ -406,36 +545,55 @@ def main():
             # Try to align pose order to boxes via confidence sorting/indices used above
             for i in range(kpts.shape[0]):
                 pts = kpts[i]
-                tcol = color_for_team(team_labels[i] if (team_labels and i < len(team_labels)) else -1)
+                tcol = color_for_team(
+                    team_labels[i] if (team_labels and i < len(team_labels)) else -1
+                )
                 # skeleton
                 for a, b in COCO_SKELETON:
                     if a < pts.shape[0] and b < pts.shape[0]:
                         xa, ya, sa = pts[a]
                         xb, yb, sb = pts[b]
                         if sa > 0.05 and sb > 0.05:
-                            cv2.line(vis, (int(xa), int(ya)), (int(xb), int(yb)), tcol, 2)
+                            cv2.line(
+                                vis, (int(xa), int(ya)), (int(xb), int(yb)), tcol, 2
+                            )
                 # joints
                 for j in range(pts.shape[0]):
                     x, y, s = pts[j]
                     if s > 0.05:
-                        cv2.circle(vis, (int(x), int(y)), 3, tcol, -1, lineType=cv2.LINE_AA)
+                        cv2.circle(
+                            vis, (int(x), int(y)), 3, tcol, -1, lineType=cv2.LINE_AA
+                        )
 
         # HUD
         hud = f"Frame: {frame_idx}"
         if team_infer is not None:
             hud += " | teams:on"
-        cv2.putText(vis, hud, (10, 24), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2, cv2.LINE_AA)
+        cv2.putText(
+            vis,
+            hud,
+            (10, 24),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.6,
+            (255, 255, 255),
+            2,
+            cv2.LINE_AA,
+        )
 
         # Write/display
         writer.write(vis)
         if args.show:
             cv2.imshow("SAM2 + YOLO Pose (q to quit)", vis)
-            if (cv2.waitKey(1) & 0xFF) == ord('q'):
+            if (cv2.waitKey(1) & 0xFF) == ord("q"):
                 break
 
         # Cleanup to prevent growth
         del res
-        if device == "cuda" and args.empty_cache_interval > 0 and (frame_idx % args.empty_cache_interval == 0):
+        if (
+            device == "cuda"
+            and args.empty_cache_interval > 0
+            and (frame_idx % args.empty_cache_interval == 0)
+        ):
             torch.cuda.empty_cache()
         if (frame_idx % 50) == 0:
             gc.collect()
@@ -459,7 +617,9 @@ def main():
     # Build per-run metrics and optionally write JSON
     try:
         metrics = {
-            "ts": datetime.now(timezone.utc).isoformat(),  # previously datetime.utcnow() + 'Z'
+            "ts": datetime.now(
+                timezone.utc
+            ).isoformat(),  # previously datetime.utcnow() + 'Z'
             "status": "ok",
             "source": str(args.source),
             "out": str(out_path),  # Auto-generated
@@ -490,7 +650,9 @@ def main():
     except Exception as e:
         print(f"[WARN] Failed to write metrics JSON: {e}")
 
-    print(f"Saved: {out_path} | frames={frame_idx} | time={dt:.1f}s | fps~{frame_idx / max(1e-6, dt):.1f}")
+    print(
+        f"Saved: {out_path} | frames={frame_idx} | time={dt:.1f}s | fps~{frame_idx / max(1e-6, dt):.1f}"
+    )
     return 0
 
 

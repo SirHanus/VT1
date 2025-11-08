@@ -1,4 +1,5 @@
 from __future__ import annotations
+
 import sys
 from pathlib import Path
 
@@ -22,7 +23,7 @@ class App(QtWidgets.QWidget):
         self.setWindowTitle("VT1 - Ice Hockey Pipeline GUI")
         self.resize(1150, 780)
         tabs = QtWidgets.QTabWidget(self)
-        lay = QtWidgets.QVBoxLayout(self);
+        lay = QtWidgets.QVBoxLayout(self)
         lay.addWidget(tabs)
         tabs.addTab(PipelineTab(self), "Pipeline")
         tabs.addTab(ClusteringTab(self), "Team Clustering")
@@ -64,18 +65,21 @@ def main():
 
     # Show startup dialog if first run
     if check_first_run():
+        # Mark that we've shown the dialog (so we don't show it again)
+
         choice = show_startup_dialog()
         if choice == "exit":
             return 0
         elif choice == "run":
             # Run training workflow
+            mark_setup_skipped()
             success = run_training_workflow()
             if success:
                 QtWidgets.QMessageBox.information(
                     None,
                     "Training Complete",
                     "Team clustering models have been created successfully!\n\n"
-                    "You can now use the Pipeline tab with team coloring enabled."
+                    "You can now use the Pipeline tab with team coloring enabled.",
                 )
             else:
                 reply = QtWidgets.QMessageBox.warning(
@@ -84,19 +88,17 @@ def main():
                     "The training workflow encountered errors.\n\n"
                     "You can try again later from the Team Clustering tab.\n\n"
                     "Continue to main GUI?",
-                    QtWidgets.QMessageBox.StandardButton.Yes | QtWidgets.QMessageBox.StandardButton.No
+                    QtWidgets.QMessageBox.StandardButton.Yes
+                    | QtWidgets.QMessageBox.StandardButton.No,
                 )
                 if reply == QtWidgets.QMessageBox.StandardButton.No:
                     return 1
-        elif choice == "skip":
-            # User chose to skip - mark it so we don't ask again
-            mark_setup_skipped()
-        # Continue to main GUI
+        # Continue to main GUI (whether they chose 'run' or 'skip')
 
     w = App()
     w.show()
     sys.exit(app.exec())
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

@@ -18,6 +18,7 @@ except Exception as e:
     Sam2VideoModel = None
     Sam2VideoProcessor = None
 
+
 # --------------------------
 # Utility helpers
 # --------------------------
@@ -34,31 +35,53 @@ def iou_xyxy(a, b) -> float:
     denom = area_a + area_b - inter + 1e-6
     return inter / denom
 
+
 def nice_fps(dt_hist: deque) -> float:
     if not dt_hist:
         return 0.0
     avg_dt = sum(dt_hist) / len(dt_hist)
     return 1.0 / max(1e-6, avg_dt)
 
+
 def color_for_id(idx: int) -> Tuple[int, int, int]:
     # Deterministic pleasant colors (BGR)
     palette = [
-        (255, 99, 71),   # tomato
-        (50, 205, 50),   # lime green
-        (255, 215, 0),   # gold
+        (255, 99, 71),  # tomato
+        (50, 205, 50),  # lime green
+        (255, 215, 0),  # gold
         (65, 105, 225),  # royal blue
-        (255, 105, 180), # hot pink
-        (255, 140, 0),   # dark orange
-        (0, 206, 209),   # dark turquoise
+        (255, 105, 180),  # hot pink
+        (255, 140, 0),  # dark orange
+        (0, 206, 209),  # dark turquoise
         (160, 32, 240),  # purple
-        (0, 191, 255),   # deep sky blue
-        (124, 252, 0),   # lawn green
+        (0, 191, 255),  # deep sky blue
+        (124, 252, 0),  # lawn green
     ]
     return palette[idx % len(palette)]
 
+
 def draw_text(img, text, x, y, scale=0.6, color=(255, 255, 255), thickness=1):
-    cv2.putText(img, text, (x, y), cv2.FONT_HERSHEY_SIMPLEX, scale, (0, 0, 0), thickness + 2, cv2.LINE_AA)
-    cv2.putText(img, text, (x, y), cv2.FONT_HERSHEY_SIMPLEX, scale, color, thickness, cv2.LINE_AA)
+    cv2.putText(
+        img,
+        text,
+        (x, y),
+        cv2.FONT_HERSHEY_SIMPLEX,
+        scale,
+        (0, 0, 0),
+        thickness + 2,
+        cv2.LINE_AA,
+    )
+    cv2.putText(
+        img,
+        text,
+        (x, y),
+        cv2.FONT_HERSHEY_SIMPLEX,
+        scale,
+        color,
+        thickness,
+        cv2.LINE_AA,
+    )
+
 
 # --------------------------
 # Simple tracker (IoU-based)
@@ -70,7 +93,9 @@ class IoUTracker:
         self.iou_thres = iou_thres
         self.max_miss = max_miss
 
-    def update(self, detections: List[Tuple[List[float], int, float]]) -> Dict[int, dict]:
+    def update(
+        self, detections: List[Tuple[List[float], int, float]]
+    ) -> Dict[int, dict]:
         """
         detections: list of (bbox[x1,y1,x2,y2], cls, conf)
         returns: dict id -> track record (with bbox, class, score)
@@ -114,8 +139,9 @@ class IoUTracker:
 # noinspection PyPackageRequirements
 # python
 class SAM2VideoWrapper:
-    def __init__(self, model_id: str = "facebook/sam2-hiera-large",
-                 device="cuda", dtype=None):
+    def __init__(
+        self, model_id: str = "facebook/sam2-hiera-large", device="cuda", dtype=None
+    ):
         if Sam2VideoModel is None or Sam2VideoProcessor is None:
             raise RuntimeError(
                 "SAM2 (transformers) not available. Install with: pip install transformers accelerate --upgrade"
@@ -141,23 +167,42 @@ class SAM2VideoWrapper:
         self.frames_with_prompts = set()
         self.known_ids = set()
         # Cache last prompts per frame to allow session recovery on mismatch
-        self._last_prompts: Dict[int, Tuple[List[int], List[List[float]], Tuple[int, int]]] = {}
+        self._last_prompts: Dict[
+            int, Tuple[List[int], List[List[float]], Tuple[int, int]]
+        ] = {}
 
-    def add_box_prompt(self, frame_bgr: np.ndarray, frame_idx: int, obj_id: int, box_xyxy: List[float]):
+    def add_box_prompt(
+        self, frame_bgr: np.ndarray, frame_idx: int, obj_id: int, box_xyxy: List[float]
+    ):
         proc = self.processor(images=frame_bgr, return_tensors="pt")
         self.processor.add_inputs_to_inference_session(
             inference_session=self.session,
             frame_idx=frame_idx,
             obj_ids=obj_id,
-            input_boxes=[[[float(box_xyxy[0]), float(box_xyxy[1]), float(box_xyxy[2]), float(box_xyxy[3])]]],
+            input_boxes=[
+                [
+                    [
+                        float(box_xyxy[0]),
+                        float(box_xyxy[1]),
+                        float(box_xyxy[2]),
+                        float(box_xyxy[3]),
+                    ]
+                ]
+            ],
             original_size=proc.original_sizes[0],
-            clear_old_inputs=True
+            clear_old_inputs=True,
         )
         self.frames_with_prompts.add(frame_idx)
         self.known_ids.add(obj_id)
         self._last_prompts[frame_idx] = ([obj_id], [box_xyxy], proc.original_sizes[0])
 
-    def add_box_prompts(self, frame_bgr: np.ndarray, frame_idx: int, obj_ids: List[int], boxes_xyxy: List[List[float]]):
+    def add_box_prompts(
+        self,
+        frame_bgr: np.ndarray,
+        frame_idx: int,
+        obj_ids: List[int],
+        boxes_xyxy: List[List[float]],
+    ):
         """Batch-add box prompts for multiple objects on the same frame.
         This ensures all obj_ids are registered as having new inputs together.
         """
@@ -165,7 +210,9 @@ class SAM2VideoWrapper:
             return
         proc = self.processor(images=frame_bgr, return_tensors="pt")
         # input_boxes shape: [images=1][num_boxes][4]
-        input_boxes = [[[float(b[0]), float(b[1]), float(b[2]), float(b[3])] for b in boxes_xyxy]]
+        input_boxes = [
+            [[float(b[0]), float(b[1]), float(b[2]), float(b[3])] for b in boxes_xyxy]
+        ]
         self.processor.add_inputs_to_inference_session(
             inference_session=self.session,
             frame_idx=frame_idx,
@@ -186,10 +233,14 @@ class SAM2VideoWrapper:
             dtype=session_dtype,
         )
 
-    def segment_frame(self, frame_bgr: np.ndarray, frame_idx: int) -> Dict[int, np.ndarray]:
+    def segment_frame(
+        self, frame_bgr: np.ndarray, frame_idx: int
+    ) -> Dict[int, np.ndarray]:
         with torch.inference_mode():
             inputs = self.processor(images=frame_bgr, return_tensors="pt")
-            pixel = inputs["pixel_values"][0].to(device=self.device, dtype=self.model_dtype)
+            pixel = inputs["pixel_values"][0].to(
+                device=self.device, dtype=self.model_dtype
+            )
             try:
                 out = self.model(
                     inference_session=self.session,
@@ -206,7 +257,12 @@ class SAM2VideoWrapper:
                             inference_session=self.session,
                             frame_idx=frame_idx,
                             obj_ids=obj_ids,
-                            input_boxes=[[[float(b[0]), float(b[1]), float(b[2]), float(b[3])] for b in boxes]],
+                            input_boxes=[
+                                [
+                                    [float(b[0]), float(b[1]), float(b[2]), float(b[3])]
+                                    for b in boxes
+                                ]
+                            ],
                             original_size=orig_size,
                             clear_old_inputs=True,
                         )
@@ -219,9 +275,7 @@ class SAM2VideoWrapper:
                 else:
                     raise
             masks = self.processor.post_process_masks(
-                [out.pred_masks],
-                original_sizes=inputs.original_sizes,
-                binarize=True
+                [out.pred_masks], original_sizes=inputs.original_sizes, binarize=True
             )[0]
         obj_ids = list(self.session.obj_ids)
         result = {}
@@ -243,23 +297,46 @@ class SAM2VideoWrapper:
                 result[int(oid)] = m
         return result
 
+
 # --------------------------
 # Main pipeline
 # --------------------------
 def parse_args():
     ap = argparse.ArgumentParser("YOLOv11n + SAM2 video segmentation demo")
-    ap.add_argument("--source", type=str, default="0", help="webcam index or path to video file")
+    ap.add_argument(
+        "--source", type=str, default="0", help="webcam index or path to video file"
+    )
     from pathlib import Path as _P
+
     root = _P(__file__).resolve().parents[2]
-    ap.add_argument("--yolo-model", type=str, default=str(root / "models" / "yolo11n.pt"), help="Ultralytics YOLO model path/name")
-    ap.add_argument("--sam2", type=str, default="facebook/sam2-hiera-large", help="SAM2 model id")
+    ap.add_argument(
+        "--yolo-model",
+        type=str,
+        default=str(root / "models" / "yolo11n.pt"),
+        help="Ultralytics YOLO model path/name",
+    )
+    ap.add_argument(
+        "--sam2", type=str, default="facebook/sam2-hiera-large", help="SAM2 model id"
+    )
     ap.add_argument("--device", type=str, default="cuda", help="'cuda' or 'cpu'")
     ap.add_argument("--imgsz", type=int, default=640, help="YOLO inference size")
-    ap.add_argument("--conf", type=float, default=0.25, help="YOLO confidence threshold")
-    ap.add_argument("--width", type=int, default=0, help="Optional resize width (keep aspect)")
-    ap.add_argument("--class-filter", type=str, default="", help="Comma-separated class ids to keep (empty=all)")
-    ap.add_argument("--blur-bg", action="store_true", help="Blur background outside masks")
+    ap.add_argument(
+        "--conf", type=float, default=0.25, help="YOLO confidence threshold"
+    )
+    ap.add_argument(
+        "--width", type=int, default=0, help="Optional resize width (keep aspect)"
+    )
+    ap.add_argument(
+        "--class-filter",
+        type=str,
+        default="",
+        help="Comma-separated class ids to keep (empty=all)",
+    )
+    ap.add_argument(
+        "--blur-bg", action="store_true", help="Blur background outside masks"
+    )
     return ap.parse_args()
+
 
 def parse_source(src: str):
     if os.path.exists(src):
@@ -268,6 +345,7 @@ def parse_source(src: str):
         return int(src)
     except ValueError:
         return src
+
 
 def main():
     args = parse_args()
@@ -291,7 +369,9 @@ def main():
 
     # Load SAM2
     try:
-        sam2 = SAM2VideoWrapper(model_id=args.sam2, device=args.device, dtype=torch.bfloat16)
+        sam2 = SAM2VideoWrapper(
+            model_id=args.sam2, device=args.device, dtype=torch.bfloat16
+        )
     except Exception as e:
         print(f"[ERROR] SAM2 init failed: {e}")
         print("Hint: pip install transformers accelerate --upgrade")
@@ -300,7 +380,9 @@ def main():
     # Optional class filter
     class_filter = None
     if args.class_filter.strip():
-        class_filter = set(int(x) for x in args.class_filter.split(",") if x.strip().isdigit())
+        class_filter = set(
+            int(x) for x in args.class_filter.split(",") if x.strip().isdigit()
+        )
 
     tracker = IoUTracker(iou_thres=0.35, max_miss=30)
 
@@ -330,7 +412,7 @@ def main():
                 conf=args.conf,
                 imgsz=args.imgsz,
                 device=args.device if args.device != "cuda" else None,
-                verbose=False
+                verbose=False,
             )[0]
 
         detections = []
@@ -372,7 +454,7 @@ def main():
             draw_text(vis, f"Res: {W}x{H}", 10, 90)
             cv2.imshow(window, vis)
             key = cv2.waitKey(1) & 0xFF
-            if key == ord('q'):
+            if key == ord("q"):
                 break
             frame_idx += 1
             continue
@@ -390,7 +472,9 @@ def main():
             if mask.sum() == 0:
                 continue
             color = color_for_id(tid)
-            contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+            contours, _ = cv2.findContours(
+                mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE
+            )
             cv2.drawContours(vis, contours, -1, color, thickness=cv2.FILLED)
             cv2.drawContours(vis, contours, -1, color, thickness=2)
 
@@ -405,7 +489,7 @@ def main():
 
         cv2.imshow(window, vis)
         key = cv2.waitKey(1) & 0xFF
-        if key == ord('q'):
+        if key == ord("q"):
             break
 
         frame_idx += 1
@@ -413,6 +497,7 @@ def main():
     cap.release()
     cv2.destroyAllWindows()
     return 0
+
 
 if __name__ == "__main__":
     raise SystemExit(main())

@@ -24,21 +24,23 @@ Usage examples (Windows cmd):
 from __future__ import annotations
 
 import argparse
+import json
+import time
 from pathlib import Path
 from typing import List, Tuple, Optional, Dict, Any
-import time
-import json
 
 import cv2
 import numpy as np
 import torch
-from vt1.config import settings
 
 # External deps (installed in the project):
 from ultralytics import YOLO
 
+from vt1.config import settings
+
 try:
     import joblib
+
     _HAS_JOBLIB = True
 except Exception:
     _HAS_JOBLIB = False
@@ -46,16 +48,17 @@ except Exception:
 try:
     from transformers import AutoImageProcessor
     from transformers.models.siglip import SiglipVisionModel  # type: ignore
+
     _HAS_SIGLIP = True
 except Exception:
     _HAS_SIGLIP = False
 
 # Colors (BGR)
 TEAM_COLORS = [
-    (255, 0, 0),    # team 0 - blue-ish
+    (255, 0, 0),  # team 0 - blue-ish
     (0, 165, 255),  # team 1 - orange-ish
     (50, 205, 50),  # team 2 - green
-    (255, 105, 180),# team 3 - pink
+    (255, 105, 180),  # team 3 - pink
     (255, 215, 0),  # team 4 - gold
 ]
 
@@ -72,32 +75,90 @@ def parse_args() -> argparse.Namespace:
     local_base = cfg.team_output_dir
     ap = argparse.ArgumentParser("Evaluate team clustering models")
     src = ap.add_argument_group("Sources")
-    src.add_argument("--images-dir", type=str, default="", help="Directory of test images")
-    src.add_argument("--glob", type=str, default="*.jpg;*.png;*.jpeg;*.JPG;*.PNG;*.JPEG", help="Semicolon-separated patterns for images")
-    src.add_argument("--video", type=str, default=str(root / 'data_hockey_colored.mp4'), help="Optional: sample frames from a video file")
-    src.add_argument("--frame-step", type=int, default=int(cfg.eval_frame_step), help="Take 1 frame every N frames when reading a video")
-    src.add_argument("--max-frames", type=int, default=0, help="Stop after N frames sampled (0=all)")
+    src.add_argument(
+        "--images-dir", type=str, default="", help="Directory of test images"
+    )
+    src.add_argument(
+        "--glob",
+        type=str,
+        default="*.jpg;*.png;*.jpeg;*.JPG;*.PNG;*.JPEG",
+        help="Semicolon-separated patterns for images",
+    )
+    src.add_argument(
+        "--video",
+        type=str,
+        default=str(cfg.default_video_source),
+        help="Optional: sample frames from a video file",
+    )
+    src.add_argument(
+        "--frame-step",
+        type=int,
+        default=int(cfg.eval_frame_step),
+        help="Take 1 frame every N frames when reading a video",
+    )
+    src.add_argument(
+        "--max-frames", type=int, default=0, help="Stop after N frames sampled (0=all)"
+    )
 
     mdl = ap.add_argument_group("Models")
-    mdl.add_argument("--team-models", type=str, default=str(cfg.team_models_dir),
-                     help="Folder with umap.pkl and kmeans.pkl (default: config team_models_dir)")
-    mdl.add_argument("--siglip", type=str, default=str(cfg.siglip_model), help="SigLIP model id")
-    mdl.add_argument("--yolo-model", type=str, default=str(cfg.yolo_model), help="YOLO detection model path/id")
+    mdl.add_argument(
+        "--team-models",
+        type=str,
+        default=str(cfg.team_models_dir),
+        help="Folder with umap.pkl and kmeans.pkl (default: config team_models_dir)",
+    )
+    mdl.add_argument(
+        "--siglip", type=str, default=str(cfg.siglip_model), help="SigLIP model id"
+    )
+    mdl.add_argument(
+        "--yolo-model",
+        type=str,
+        default=str(cfg.yolo_model),
+        help="YOLO detection model path/id",
+    )
 
     det = ap.add_argument_group("Detection")
-    det.add_argument("--imgsz", type=int, default=int(cfg.yolo_imgsz), help="YOLO inference size")
-    det.add_argument("--conf", type=float, default=float(cfg.yolo_conf), help="YOLO confidence threshold")
-    det.add_argument("--max-boxes", type=int, default=int(cfg.yolo_max_boxes), help="Max boxes per image/frame to annotate")
+    det.add_argument(
+        "--imgsz", type=int, default=int(cfg.yolo_imgsz), help="YOLO inference size"
+    )
+    det.add_argument(
+        "--conf",
+        type=float,
+        default=float(cfg.yolo_conf),
+        help="YOLO confidence threshold",
+    )
+    det.add_argument(
+        "--max-boxes",
+        type=int,
+        default=int(cfg.yolo_max_boxes),
+        help="Max boxes per image/frame to annotate",
+    )
 
     inf = ap.add_argument_group("Inference")
-    inf.add_argument("--central-ratio", type=float, default=float(cfg.central_ratio_default), help="Central crop ratio of bbox")
+    inf.add_argument(
+        "--central-ratio",
+        type=float,
+        default=float(cfg.central_ratio_default),
+        help="Central crop ratio of bbox",
+    )
     inf.add_argument("--device", type=str, default="cuda", help="cuda or cpu")
 
     out = ap.add_argument_group("Output")
-    out.add_argument("--out-dir", type=str, default=str(local_base), help="Output directory root")
+    out.add_argument(
+        "--out-dir", type=str, default=str(local_base), help="Output directory root"
+    )
     out.add_argument("--show", action="store_true", help="Show previews in a window")
-    out.add_argument("--save-grid", action="store_true", help="Save a mosaic grid of annotated images")
-    out.add_argument("--limit-images", type=int, default=int(cfg.eval_limit_images), help="Max annotated images to write")
+    out.add_argument(
+        "--save-grid",
+        action="store_true",
+        help="Save a mosaic grid of annotated images",
+    )
+    out.add_argument(
+        "--limit-images",
+        type=int,
+        default=int(cfg.eval_limit_images),
+        help="Max annotated images to write",
+    )
 
     return ap.parse_args()
 
@@ -106,7 +167,9 @@ def ensure_dir(p: Path):
     p.mkdir(parents=True, exist_ok=True)
 
 
-def central_crop_from_bbox(img: np.ndarray, bbox: Tuple[float, float, float, float], ratio: float) -> Optional[np.ndarray]:
+def central_crop_from_bbox(
+    img: np.ndarray, bbox: Tuple[float, float, float, float], ratio: float
+) -> Optional[np.ndarray]:
     h, w = img.shape[:2]
     x1, y1, x2, y2 = bbox
     x1 = max(0.0, min(float(w - 1), x1))
@@ -137,7 +200,9 @@ def central_crop_from_bbox(img: np.ndarray, bbox: Tuple[float, float, float, flo
 
 
 class ClusterTester:
-    def __init__(self, models_dir: Path, yolo_model: str, siglip_id: str, device: str = "cuda"):
+    def __init__(
+        self, models_dir: Path, yolo_model: str, siglip_id: str, device: str = "cuda"
+    ):
         if not _HAS_JOBLIB:
             raise RuntimeError("joblib not available")
         models_dir = Path(models_dir)
@@ -169,15 +234,33 @@ class ClusterTester:
         self.siglip.eval()
 
     @torch.inference_mode()
-    def predict_labels_on_image(self, img_bgr: np.ndarray, imgsz: int, conf_thr: float, max_boxes: int,
-                                central_ratio: float) -> Tuple[np.ndarray, List[List[float]], List[int], List[float]]:
+    def predict_labels_on_image(
+        self,
+        img_bgr: np.ndarray,
+        imgsz: int,
+        conf_thr: float,
+        max_boxes: int,
+        central_ratio: float,
+    ) -> Tuple[np.ndarray, List[List[float]], List[int], List[float]]:
         # YOLO person detection
-        res = self.yolo.predict(img_bgr, imgsz=imgsz, conf=conf_thr, device=self.device, verbose=False)[0]
+        res = self.yolo.predict(
+            img_bgr, imgsz=imgsz, conf=conf_thr, device=self.device, verbose=False
+        )[0]
         boxes: List[List[float]] = []
         if res.boxes is not None and len(res.boxes) > 0:
             xyxy = res.boxes.xyxy.detach().cpu().numpy()
-            conf = res.boxes.conf.detach().cpu().numpy() if getattr(res.boxes, 'conf', None) is not None else None
-            order = np.argsort(-(conf if conf is not None else (xyxy[:, 2]-xyxy[:, 0])*(xyxy[:, 3]-xyxy[:, 1])))
+            conf = (
+                res.boxes.conf.detach().cpu().numpy()
+                if getattr(res.boxes, "conf", None) is not None
+                else None
+            )
+            order = np.argsort(
+                -(
+                    conf
+                    if conf is not None
+                    else (xyxy[:, 2] - xyxy[:, 0]) * (xyxy[:, 3] - xyxy[:, 1])
+                )
+            )
             keep = order[: min(len(order), max(0, int(max_boxes)))]
             boxes = xyxy[keep].tolist()
         if not boxes:
@@ -186,7 +269,9 @@ class ClusterTester:
         crops = []
         idxs = []
         for i, bb in enumerate(boxes):
-            crop = central_crop_from_bbox(img_bgr, (bb[0], bb[1], bb[2], bb[3]), central_ratio)
+            crop = central_crop_from_bbox(
+                img_bgr, (bb[0], bb[1], bb[2], bb[3]), central_ratio
+            )
             if crop is None:
                 continue
             if crop.ndim == 2:
@@ -198,7 +283,9 @@ class ClusterTester:
         if not crops:
             return img_bgr, boxes, [], []
         # SigLIP embeddings
-        px = self.processor(images=crops, return_tensors="pt")["pixel_values"].to(self.device)
+        px = self.processor(images=crops, return_tensors="pt")["pixel_values"].to(
+            self.device
+        )
         out = self.siglip(pixel_values=px)
         if hasattr(out, "pooler_output") and out.pooler_output is not None:
             emb = out.pooler_output
@@ -224,8 +311,26 @@ class ClusterTester:
             col = color_for_team(lab)
             cv2.rectangle(annotated, (x1, y1), (x2, y2), col, 2)
             tag = f"T{lab} m={margins[j]:.2f}"
-            cv2.putText(annotated, tag, (x1, max(0, y1 - 6)), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 0), 2, cv2.LINE_AA)
-            cv2.putText(annotated, tag, (x1, max(0, y1 - 6)), cv2.FONT_HERSHEY_SIMPLEX, 0.5, col, 1, cv2.LINE_AA)
+            cv2.putText(
+                annotated,
+                tag,
+                (x1, max(0, y1 - 6)),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                0.5,
+                (0, 0, 0),
+                2,
+                cv2.LINE_AA,
+            )
+            cv2.putText(
+                annotated,
+                tag,
+                (x1, max(0, y1 - 6)),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                0.5,
+                col,
+                1,
+                cv2.LINE_AA,
+            )
         # Expand labels to align with 'boxes' order
         full_labels = [-1] * len(boxes)
         full_margins = [0.0] * len(boxes)
@@ -246,7 +351,9 @@ def read_images(images_dir: str, patterns: str) -> List[Path]:
     return [p for p in out if p.is_file()]
 
 
-def sample_video_frames(video_path: str, frame_step: int, max_frames: int) -> List[np.ndarray]:
+def sample_video_frames(
+    video_path: str, frame_step: int, max_frames: int
+) -> List[np.ndarray]:
     frames: List[np.ndarray] = []
     cap = cv2.VideoCapture(video_path)
     if not cap.isOpened():
@@ -267,7 +374,9 @@ def sample_video_frames(video_path: str, frame_step: int, max_frames: int) -> Li
     return frames
 
 
-def make_grid(images: List[np.ndarray], cols: int = 3, pad: int = 4) -> Optional[np.ndarray]:
+def make_grid(
+    images: List[np.ndarray], cols: int = 3, pad: int = 4
+) -> Optional[np.ndarray]:
     if not images:
         return None
     Hs = [im.shape[0] for im in images]
@@ -276,7 +385,11 @@ def make_grid(images: List[np.ndarray], cols: int = 3, pad: int = 4) -> Optional
     W = int(np.median(Ws))
     resized = [cv2.resize(im, (W, H), interpolation=cv2.INTER_AREA) for im in images]
     rows = (len(resized) + cols - 1) // cols
-    grid = np.full((rows * H + (rows + 1) * pad, cols * W + (cols + 1) * pad, 3), 32, dtype=np.uint8)
+    grid = np.full(
+        (rows * H + (rows + 1) * pad, cols * W + (cols + 1) * pad, 3),
+        32,
+        dtype=np.uint8,
+    )
     k = 0
     for r in range(rows):
         for c in range(cols):
@@ -284,7 +397,7 @@ def make_grid(images: List[np.ndarray], cols: int = 3, pad: int = 4) -> Optional
                 break
             y = r * H + (r + 1) * pad
             x = c * W + (c + 1) * pad
-            grid[y:y + H, x:x + W] = resized[k]
+            grid[y : y + H, x : x + W] = resized[k]
             k += 1
     return grid
 
@@ -309,7 +422,9 @@ def main() -> int:
             alt = path.with_suffix(".png")
             ok2 = cv2.imwrite(str(alt), img)
             if ok2:
-                print(f"[WARN] Failed to write {path.name}, saved as {alt.name} instead")
+                print(
+                    f"[WARN] Failed to write {path.name}, saved as {alt.name} instead"
+                )
             else:
                 print(f"[ERROR] Failed to write annotated image: {path}")
         else:
@@ -318,8 +433,12 @@ def main() -> int:
 
     # Load tester
     try:
-        tester = ClusterTester(models_dir=Path(args.team_models), yolo_model=args.yolo_model,
-                               siglip_id=args.siglip, device=device)
+        tester = ClusterTester(
+            models_dir=Path(args.team_models),
+            yolo_model=args.yolo_model,
+            siglip_id=args.siglip,
+            device=device,
+        )
     except Exception as e:
         print(f"[ERROR] Failed to init models: {e}")
         return 1
@@ -333,30 +452,41 @@ def main() -> int:
     # From images dir
     img_paths = read_images(args.images_dir, args.glob) if args.images_dir else []
     if args.images_dir:
-        print(f"[INFO] Images dir set: {args.images_dir} | patterns: {args.glob} | matched: {len(img_paths)} file(s)")
+        print(
+            f"[INFO] Images dir set: {args.images_dir} | patterns: {args.glob} | matched: {len(img_paths)} file(s)"
+        )
     if args.images_dir and not img_paths:
-        print(f"[WARN] No images matched in {args.images_dir} for patterns: {args.glob}")
+        print(
+            f"[WARN] No images matched in {args.images_dir} for patterns: {args.glob}"
+        )
     for p in img_paths:
         img = cv2.imread(str(p))
         if img is None:
             print(f"[WARN] Could not read image: {p}")
             continue
-        ann, boxes, labels, margins = tester.predict_labels_on_image(img, imgsz=args.imgsz, conf_thr=args.conf,
-                                                                     max_boxes=args.max_boxes, central_ratio=args.central_ratio)
+        ann, boxes, labels, margins = tester.predict_labels_on_image(
+            img,
+            imgsz=args.imgsz,
+            conf_thr=args.conf,
+            max_boxes=args.max_boxes,
+            central_ratio=args.central_ratio,
+        )
         # Save annotated
         out_path = out_root / f"{p.stem}_ann.jpg"
         save_annotated(ann, out_path)
         saved_count += 1
         annotated_images.append(ann)
-        per_image_stats.append({
-            "source": str(p),
-            "num_boxes": int(len(boxes)),
-            "labels": labels,
-            "margins": margins,
-        })
+        per_image_stats.append(
+            {
+                "source": str(p),
+                "num_boxes": int(len(boxes)),
+                "labels": labels,
+                "margins": margins,
+            }
+        )
         if args.show:
             cv2.imshow("eval", ann)
-            if (cv2.waitKey(1) & 0xFF) == ord('q'):
+            if (cv2.waitKey(1) & 0xFF) == ord("q"):
                 break
         if args.limit_images and len(annotated_images) >= args.limit_images:
             break
@@ -364,27 +494,38 @@ def main() -> int:
     # From video frames
     if args.video:
         video_abs = str(Path(args.video).resolve())
-        print(f"[INFO] Sampling video: {video_abs} | frame-step={int(args.frame_step)} | max-frames={int(args.max_frames)}")
-        frames = sample_video_frames(args.video, frame_step=int(args.frame_step), max_frames=int(args.max_frames))
+        print(
+            f"[INFO] Sampling video: {video_abs} | frame-step={int(args.frame_step)} | max-frames={int(args.max_frames)}"
+        )
+        frames = sample_video_frames(
+            args.video, frame_step=int(args.frame_step), max_frames=int(args.max_frames)
+        )
         print(f"[INFO] Sampled {len(frames)} frame(s) from video")
         if not frames:
             print(f"[WARN] No frames sampled from video: {args.video}")
         for i, fr in enumerate(frames):
-            ann, boxes, labels, margins = tester.predict_labels_on_image(fr, imgsz=args.imgsz, conf_thr=args.conf,
-                                                                         max_boxes=args.max_boxes, central_ratio=args.central_ratio)
+            ann, boxes, labels, margins = tester.predict_labels_on_image(
+                fr,
+                imgsz=args.imgsz,
+                conf_thr=args.conf,
+                max_boxes=args.max_boxes,
+                central_ratio=args.central_ratio,
+            )
             out_path = out_root / f"video_{i:05d}_ann.jpg"
             save_annotated(ann, out_path)
             saved_count += 1
             annotated_images.append(ann)
-            per_image_stats.append({
-                "source": f"{args.video}#frame{i}",
-                "num_boxes": int(len(boxes)),
-                "labels": labels,
-                "margins": margins,
-            })
+            per_image_stats.append(
+                {
+                    "source": f"{args.video}#frame{i}",
+                    "num_boxes": int(len(boxes)),
+                    "labels": labels,
+                    "margins": margins,
+                }
+            )
             if args.show:
                 cv2.imshow("eval", ann)
-                if (cv2.waitKey(1) & 0xFF) == ord('q'):
+                if (cv2.waitKey(1) & 0xFF) == ord("q"):
                     break
             if args.limit_images and len(annotated_images) >= args.limit_images:
                 break
@@ -431,7 +572,9 @@ def main() -> int:
 
     print(f"[INFO] Saved {saved_count} annotated image(s) to: {out_root}")
     if saved_count == 0:
-        print("[HINT] No images saved. Check that --images-dir or --video is set, patterns match files, and YOLO detected frames were read.")
+        print(
+            "[HINT] No images saved. Check that --images-dir or --video is set, patterns match files, and YOLO detected frames were read."
+        )
     print(json.dumps(summary, indent=2))
     return 0
 
