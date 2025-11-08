@@ -93,9 +93,7 @@ jobs:
         shell: cmd
         run: |
           echo Creating small smoke.mp4 video for pipeline test
-          python -c "import cv2, numpy as np; fourcc=cv2.VideoWriter_fourcc(*'mp4v'); out=cv2.VideoWriter('smoke.mp4', fourcc, 10.0, (320,240));
-          for i in range(20): out.write((np.random.rand(240,320,3)*255).astype('uint8'));
-          out.release()"
+          python -c "import cv2, numpy as np, sys; fourcc=cv2.VideoWriter_fourcc(*'mp4v'); out=cv2.VideoWriter('smoke.mp4', fourcc, 10.0, (320,240)); [out.write((np.random.rand(240,320,3)*255).astype('uint8')) for _ in range(20)]; out.release(); print('Created smoke.mp4')"
 
       - name: Smoke test pipeline executables (CPU, few frames)
         shell: cmd
