@@ -14,6 +14,9 @@ Outputs in <out_dir>:
 - labeled_index.csv              # combined_index + cluster label
 - summary.json                   # basic stats, silhouette if available
 - (optional) umap_scatter.png    # if --plot
+
+Models (.pkl) are saved to the configured team models directory (see vt1.config),
+or override via --models-dir.
 """
 from __future__ import annotations
 
@@ -35,16 +38,38 @@ try:
 except Exception:
     _HAS_MPL = False
 
+# New: project config for defaults
+try:
+    from vt1.config import settings  # type: ignore
+except Exception:
+    settings = None  # type: ignore
+
 
 def parse_args() -> argparse.Namespace:
-    root = Path(__file__).resolve().parents[1]
+    # Default input/output from config if available; fallback to adjacent-to-script
     ap = argparse.ArgumentParser("UMAP + KMeans clustering for team separation")
-    # Default input/output to be adjacent to this script
-    local_base = Path(__file__).resolve().parent
-    ap.add_argument("--in-root", type=str, default=str(local_base / "clustering"),
-                    help="Root directory with per-video embeddings (default: team_clustering/clustering)")
-    ap.add_argument("--out-dir", type=str, default=str(local_base / "clustering"),
-                    help="Output directory for clustering artifacts (default: team_clustering/clustering)")
+    local_base = None
+    models_base = None
+    if settings is not None:
+        try:
+            cfg = settings()
+            local_base = cfg.team_output_dir
+            models_base = cfg.team_models_dir
+        except Exception:
+            local_base = None
+            models_base = None
+    if local_base is None:
+        local_base = Path(__file__).resolve().parent / "clustering"
+    if models_base is None:
+        models_base = Path(__file__).resolve().parent / "clustering"
+
+    ap.add_argument("--in-root", type=str, default=str(local_base),
+                    help="Root directory with per-video embeddings (default: config team_output_dir)")
+    ap.add_argument("--out-dir", type=str, default=str(local_base),
+                    help="Output directory for clustering artifacts (default: config team_output_dir)")
+    # New: where to save the fitted UMAP/KMeans models
+    ap.add_argument("--models-dir", type=str, default=str(models_base),
+                    help="Directory to save umap.pkl and kmeans.pkl (default: config team_models_dir)")
 
     ap.add_argument("--k", type=int, default=2, help="Number of clusters for KMeans (e.g., 2 teams)")
     ap.add_argument("--umap-dim", type=int, default=16, help="UMAP output dimensionality")
@@ -114,7 +139,7 @@ def run_umap(E: np.ndarray, dim: int, metric: str, neighbors: int, seed: int, mi
     return Z, reducer
 
 
-def run_kmeans(Z: np.ndarray, k: int, seed: int) -> Tuple[np.ndarray, Dict[str, Any]]:
+def run_kmeans(Z: np.ndarray, k: int, seed: int) -> Tuple[np.ndarray, Dict[str, Any], 'KMeans']:
     try:
         from sklearn.cluster import KMeans
         from sklearn.metrics import silhouette_score
@@ -131,7 +156,7 @@ def run_kmeans(Z: np.ndarray, k: int, seed: int) -> Tuple[np.ndarray, Dict[str, 
             info["silhouette_cosine"] = float(silhouette_score(Z, labels, metric="cosine"))
     except Exception:
         pass
-    return labels.astype(int), info
+    return labels.astype(int), info, km
 
 
 def main() -> int:
@@ -177,24 +202,29 @@ def main() -> int:
     np.save(out_root / f"umap_{args.umap_dim}.npy", Z)
 
     # KMeans
-    labels, km_info = run_kmeans(Z, k=args.k, seed=args.seed)
+    labels, km_info, km_model = run_kmeans(Z, k=args.k, seed=args.seed)
     np.save(out_root / f"labels_k{args.k}.npy", labels)
 
-    # Optionally persist models for inference
+    # Optionally persist models for inference (to models-dir)
+    saved_umap = None
+    saved_kmeans = None
     if args.save_models:
         try:
             import joblib
-            if args.reuse_umap:
-                # Only save KMeans when reusing a global reducer
-                joblib.dump(reducer, out_root / "umap.pkl") if reducer is not None and not args.reuse_umap else None
-            else:
-                joblib.dump(reducer, out_root / "umap.pkl")
-            from sklearn.cluster import KMeans
-            km = KMeans(n_clusters=int(args.k), n_init=10, random_state=args.seed)
-            km.fit(Z)
-            joblib.dump(km, out_root / "kmeans.pkl")
+            models_dir = Path(args.models_dir)
+            ensure_dir(models_dir)
+            # Save UMAP reducer
+            if reducer is not None:
+                saved_umap = models_dir / "umap.pkl"
+                joblib.dump(reducer, saved_umap)
+            # Save KMeans model
+            saved_kmeans = models_dir / "kmeans.pkl"
+            joblib.dump(km_model, saved_kmeans)
+            print(f"[INFO] Saved models to: {models_dir}")
         except Exception as e:
             print(f"[WARN] Failed to save models: {e}")
+    else:
+        print("[INFO] Models not saved (no --save-models flag). Re-run with --save-models to create umap.pkl and kmeans.pkl.")
 
     # Write labeled index
     labeled_header = [*rows[0], "cluster"]
@@ -216,6 +246,9 @@ def main() -> int:
         "kmeans": km_info,
         "umap_min_dist": float(args.umap_min_dist),
         "reuse_umap": (str(args.reuse_umap) if args.reuse_umap else None),
+        "models_dir": (str(Path(args.models_dir).resolve()) if args.save_models else None),
+        "umap_pkl": (str(Path(saved_umap).resolve()) if saved_umap else None),
+        "kmeans_pkl": (str(Path(saved_kmeans).resolve()) if saved_kmeans else None),
     }
     with (out_root / "summary.json").open("w", encoding="utf-8") as f:
         json.dump(summary, f, ensure_ascii=False, indent=2)
@@ -238,6 +271,8 @@ def main() -> int:
             pass
 
     print(f"Clustering complete. Output in: {out_root}")
+    if args.save_models:
+        print(f"Models available at: {Path(args.models_dir).resolve()}")
     return 0
 
 

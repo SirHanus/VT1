@@ -136,9 +136,10 @@ class PipelineTab(QtWidgets.QWidget):
         self.btn_open_outputs.clicked.connect(self._open_outputs_folder)
 
     def _fill_defaults(self):
-        root = self._repo_root()
+        cfg = settings()
+        root = cfg.repo_root
         self.ed_source.setText(str(root / "data_hockey.mp4"))
-        self.ed_pose_model.setText(str(root / "models" / "yolo11x-pose.pt"))
+        self.ed_pose_model.setText(str(cfg.pose_model))
         self.ed_sam2.setText("facebook/sam2-hiera-large")
         self.cb_device.setCurrentText("cuda")
         self.sb_imgsz.setValue(640)
@@ -152,7 +153,7 @@ class PipelineTab(QtWidgets.QWidget):
         self.sb_sam_reinit.setValue(0);
         self.sb_empty_cache.setValue(25)
         self.ed_metrics.setText("")
-        self.ed_team_models.setText(str(root / "models" / "team_clustering"))
+        self.ed_team_models.setText(str(cfg.team_models_dir))
         self.ed_siglip.setText("google/siglip-base-patch16-224")
         self.dsb_central_ratio.setValue(0.6)
         self.cb_disable_team.setChecked(False)

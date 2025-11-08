@@ -69,7 +69,7 @@ def _coerce_paths(repo_root: Path, raw: Dict[str, Any]) -> Dict[str, Any]:
     out['models_dir'] = rp(raw.get('models_dir', 'models'))
     out['pose_model'] = rp(raw.get('pose_model', 'models/yolo11x-pose.pt'))
     out['yolo_model'] = rp(raw.get('yolo_model', 'models/yolo11n.pt'))
-    out['team_models_dir'] = rp(raw.get('team_models_dir', 'models/team_clustering'))
+    out['team_models_dir'] = rp(raw.get('team_models_dir', 'outputs/team_clustering'))
     out['pipeline_output_dir'] = rp(raw.get('pipeline_output_dir', 'outputs'))
     out['team_output_dir'] = rp(raw.get('team_output_dir', 'outputs/team_clustering'))
     out['log_level'] = str(raw.get('log_level', 'INFO'))
@@ -104,4 +104,3 @@ def reload() -> Config:
     with _LOCK:
         _SETTINGS = _load()
         return _SETTINGS
-

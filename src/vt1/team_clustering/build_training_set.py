@@ -455,21 +455,28 @@ def main() -> int:
         print(f"[ERROR] No videos found. Checked: --videos {args.videos} or {args.videos_dir} / {args.glob}")
         return 1
 
-    # Init detector: try RF-DETR if provided; otherwise YOLO fallback if enabled
+    # Detector selection
+    use_rfdetr = bool(args.det_config and args.det_weights)
+    use_yolo_fb = bool(args.yolo_fallback or not use_rfdetr)
+    if (not use_rfdetr) and (not args.yolo_fallback):
+        print("[INFO] RF-DETR config/weights not provided; enabling YOLO fallback automatically.")
+
     detector = None
     det_name = None
-    if args.det_config and args.det_weights:
+    if use_rfdetr:
         try:
             detector = RFDETRDetector(args.det_config, args.det_weights, device=device, person_class_name=args.person_class_name)
             det_name = "rf-detr-s"
         except Exception as e:
             print(f"[WARN] RF-DETR init failed: {e}")
-    if detector is None and args.yolo_fallback:
+            detector = None
+    if detector is None and use_yolo_fb:
         try:
             detector = YOLOFallbackDetector(args.yolo_model, device=device)
             det_name = "yolo-fallback"
         except Exception as e:
             print(f"[WARN] YOLO fallback init failed: {e}")
+            detector = None
     if detector is None:
         print("[ERROR] No detector available. Provide --det-config/--det-weights for RF-DETR-S or enable --yolo-fallback.")
         return 1

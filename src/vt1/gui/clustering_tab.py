@@ -308,11 +308,29 @@ class ClusteringTab(QtWidgets.QWidget):
         run.addWidget(btn_run); run.addWidget(btn_stop); run.addWidget(status); run.addWidget(pb); lay.addLayout(run)
         log = QtWidgets.QPlainTextEdit(); log.setReadOnly(True); lay.addWidget(log,1)
         widgets={'proc':None,'run':btn_run,'stop':btn_stop,'status':status,'progress':pb,'log':log}
-        btn_run.clicked.connect(lambda: self._start('vt1.team_clustering.eval_clustering', self._args_eval(
-            ed_images_dir.text(), ed_glob.text(), ed_video.text(), sb_frame_step.value(), sb_max_frames.value(), ed_team_models.text(), ed_siglip.text(), ed_yolo_model.text(), sb_imgsz.value(), ds_conf.value(), sb_max_boxes.value(), ds_central.value(), cb_device.currentText(), ed_out_dir.text(), cb_show.isChecked(), cb_save_grid.isChecked(), sb_limit_images.value()
-        ), widgets))
+        def _run_eval():
+            if not self._preflight_eval_models(ed_team_models.text()):
+                return
+            self._start('vt1.team_clustering.eval_clustering', self._args_eval(
+                ed_images_dir.text(), ed_glob.text(), ed_video.text(), sb_frame_step.value(), sb_max_frames.value(), ed_team_models.text(), ed_siglip.text(), ed_yolo_model.text(), sb_imgsz.value(), ds_conf.value(), sb_max_boxes.value(), ds_central.value(), cb_device.currentText(), ed_out_dir.text(), cb_show.isChecked(), cb_save_grid.isChecked(), sb_limit_images.value()
+            ), widgets)
+        btn_run.clicked.connect(_run_eval)
         btn_stop.clicked.connect(lambda: self._stop(widgets))
         return w
+
+    def _preflight_eval_models(self, models_dir: str) -> bool:
+        try:
+            p = Path(models_dir)
+            umap_p = p / 'umap.pkl'
+            km_p = p / 'kmeans.pkl'
+            if not umap_p.exists() or not km_p.exists():
+                QtWidgets.QMessageBox.warning(self, 'Team models missing',
+                    f"Couldn't find umap.pkl and kmeans.pkl in:\n{p}\n\nCreate them first via the Cluster tab (enable 'Save models'), or point 'Team models' to a folder that contains them.")
+                return False
+            return True
+        except Exception as e:
+            QtWidgets.QMessageBox.warning(self, 'Check failed', f'Error while checking team models: {e}')
+            return False
 
     def _args_eval(self, images_dir, glob, video, frame_step, max_frames, team_models, siglip, yolo_model, imgsz, conf, max_boxes, central_ratio, device, out_dir, show, save_grid, limit_images):
         args=[]

@@ -9,17 +9,17 @@ Evaluate team clustering models on images or sampled video frames.
 Usage examples (Windows cmd):
 
   # Evaluate on a folder of images
-  python offline_pipeline\team_clustering\eval_clustering.py ^
+  python -m vt1.team_clustering.eval_clustering ^
     --images-dir some\images ^
-    --team-models offline_pipeline\team_clustering\clustering ^
-    --yolo-model yolo11n.pt --conf 0.3
+    --team-models outputs\team_clustering ^
+    --yolo-model models\yolo11n.pt --conf 0.3
 
   # Evaluate by sampling frames from a video (every 30 frames)
-  python offline_pipeline\team_clustering\eval_clustering.py ^
-    --video data_hockey.mp4 ^
+  python -m vt1.team_clustering.eval_clustering ^
+    --video D:\WORK\VT1\data_hockey.mp4 ^
     --frame-step 30 ^
     --max-frames 200 ^
-    --team-models offline_pipeline\team_clustering\clustering
+    --team-models outputs\team_clustering
 """
 from __future__ import annotations
 
@@ -80,7 +80,7 @@ def parse_args() -> argparse.Namespace:
 
     mdl = ap.add_argument_group("Models")
     mdl.add_argument("--team-models", type=str, default=str(cfg.team_models_dir),
-                     help="Folder with umap.pkl and kmeans.pkl (default: models/team_clustering)")
+                     help="Folder with umap.pkl and kmeans.pkl (default: outputs/team_clustering)")
     mdl.add_argument("--siglip", type=str, default="google/siglip-base-patch16-224", help="SigLIP model id")
     mdl.add_argument("--yolo-model", type=str, default=str(cfg.yolo_model), help="YOLO detection model path/id")
 
@@ -140,8 +140,18 @@ class ClusterTester:
     def __init__(self, models_dir: Path, yolo_model: str, siglip_id: str, device: str = "cuda"):
         if not _HAS_JOBLIB:
             raise RuntimeError("joblib not available")
-        self.reducer = joblib.load(Path(models_dir) / "umap.pkl")
-        self.kmeans = joblib.load(Path(models_dir) / "kmeans.pkl")
+        models_dir = Path(models_dir)
+        umap_p = models_dir / "umap.pkl"
+        kmeans_p = models_dir / "kmeans.pkl"
+        if not umap_p.exists() or not kmeans_p.exists():
+            raise FileNotFoundError(
+                f"Missing team models. Expected umap.pkl and kmeans.pkl in: {models_dir}.\n"
+                f"Generate them via clustering (GUI: Clustering → Cluster → Save models) or CLI: \n"
+                f"  python -m vt1.team_clustering.cluster_umap_kmeans --in-root {settings().team_output_dir} --out-dir {settings().team_output_dir} --save-models\n"
+                f"Or point --team-models to a folder that contains these files."
+            )
+        self.reducer = joblib.load(umap_p)
+        self.kmeans = joblib.load(kmeans_p)
         self.yolo = YOLO(yolo_model)
         self.device = device
         if device == "cuda":
