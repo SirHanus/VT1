@@ -15,7 +15,7 @@ from vt1.gui.help_tab import HelpTab  # Help tab import
 class App(QtWidgets.QWidget):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("SAM2 + YOLO Pose - Offline Pipeline GUI")
+        self.setWindowTitle("Ice Hockey Pipeline GUI")
         self.resize(1150, 780)
         tabs = QtWidgets.QTabWidget(self)
         lay = QtWidgets.QVBoxLayout(self); lay.addWidget(tabs)

@@ -1,0 +1,75 @@
+name: build-windows-exe
+
+on:
+  push:
+    branches: [ main]
+    tags: [ 'v*' ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+
+      - name: Show environment
+        run: |
+          python -V
+          echo PYTHONPATH=%PYTHONPATH%
+
+      - name: Install project (with build extras)
+        run: |
+          pip install -U pip
+          pip install .[build]
+          pip list
+
+      - name: Build executables via PyInstaller (direct)
+        run: |
+          python -m PyInstaller --noconfirm --onefile ^
+            --name vt1-pipeline ^
+            --paths src ^
+            --hidden-import vt1.pipeline.sam_general ^
+            --hidden-import vt1.pipeline.sam_offline ^
+            -s ^
+            src\vt1\pipeline\sam_offline.py
+          python -m PyInstaller --noconfirm --onefile ^
+            --name vt1-gui ^
+            --paths src ^
+            --hidden-import vt1.gui.pipeline_tab ^
+            --hidden-import vt1.gui.clustering_tab ^
+            --hidden-import vt1.gui.help_tab ^
+            -w ^
+            -s ^
+            src\vt1\gui\main.py
+        shell: cmd
+
+      - name: List dist contents
+        run: dir dist
+        shell: cmd
+
+      - name: Upload executables
+        uses: actions/upload-artifact@v4
+        with:
+          name: vt1-windows-exe
+          path: |
+            dist/vt1-pipeline.exe
+            dist/vt1-gui.exe
+
+      - name: Upload build logs (optional)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+            name: pyinstaller-build-logs
+            path: build/**
+            if-no-files-found: ignore
+
