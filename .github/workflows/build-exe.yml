@@ -89,13 +89,21 @@ jobs:
         shell: cmd
         run: dir dist
 
+      - name: Prepare smoke test video
+        shell: cmd
+        run: |
+          echo Creating small smoke.mp4 video for pipeline test
+          python -c "import cv2, numpy as np; fourcc=cv2.VideoWriter_fourcc(*'mp4v'); out=cv2.VideoWriter('smoke.mp4', fourcc, 10.0, (320,240));
+          for i in range(20): out.write((np.random.rand(240,320,3)*255).astype('uint8'));
+          out.release()"
+
       - name: Smoke test pipeline executables (CPU, few frames)
         shell: cmd
         run: |
           echo Running onefile pipeline smoke test
-          dist\vt1-pipeline-onefile.exe --source data_hockey.mp4 --device cpu --max-frames 5 --no-sam || exit /b 1
+          dist\vt1-pipeline-onefile.exe --source smoke.mp4 --device cpu --max-frames 5 --no-sam --disable-team || exit /b 1
           echo Running onedir pipeline smoke test
-          dist\vt1-pipeline\vt1-pipeline.exe --source data_hockey.mp4 --device cpu --max-frames 5 --no-sam || exit /b 1
+          dist\vt1-pipeline\vt1-pipeline.exe --source smoke.mp4 --device cpu --max-frames 5 --no-sam --disable-team || exit /b 1
 
       - name: Upload artifacts (executables and onedir folders)
         uses: actions/upload-artifact@v4
