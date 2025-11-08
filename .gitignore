@@ -217,3 +217,5 @@ __marimo__/
 /team_clustering/clustering/CAR_vs_NYR_*
 
 config_local.toml
+
+/models
