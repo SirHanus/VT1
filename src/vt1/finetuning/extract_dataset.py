@@ -467,19 +467,59 @@ class HockeyPoseDatasetExtractor:
         print(f"Val: {len(val_data)} images")
 
         # Process train and val splits
+        skipped = {"train": 0, "val": 0}
         for data, split in [(train_data, "train"), (val_data, "val")]:
             print(f"\nProcessing {split} split...")
+            saved_count = 0
+
             for idx, (img_path, class_id) in enumerate(data):
+                # Re-run pose detection on the crop to get keypoints
+                img_data = cv2.imread(str(img_path))
+                if img_data is None:
+                    print(f"  WARNING: Could not read {img_path}, skipping")
+                    skipped[split] += 1
+                    continue
+
+                h, w = img_data.shape[:2]
+
+                # Run pose detection with lower threshold for better capture
+                results = self.model(img_data, conf=0.2, verbose=False)
+
+                # Only save if we detected valid keypoints
+                has_valid_keypoints = False
+                kpts_normalized = None
+
+                if (
+                    len(results) > 0
+                    and results[0].keypoints is not None
+                    and len(results[0].keypoints) > 0
+                ):
+                    # Get the first detection (should be the only one)
+                    kpts = results[0].keypoints[0].data.cpu().numpy().squeeze()
+
+                    # Ensure we have 17 keypoints with at least some visible
+                    if len(kpts) == 17:
+                        # Check how many keypoints are visible
+                        visible_kpts = np.sum(kpts[:, 2] > 0.5)
+                        if visible_kpts >= self.min_keypoints:
+                            # Normalize keypoints to crop size
+                            kpts_normalized = kpts.copy()
+                            kpts_normalized[:, 0] /= w  # normalize x
+                            kpts_normalized[:, 1] /= h  # normalize y
+                            has_valid_keypoints = True
+
+                if not has_valid_keypoints:
+                    # Skip this image - no valid keypoints detected
+                    skipped[split] += 1
+                    if (idx + 1) % 50 == 0:
+                        print(
+                            f"  Processed {idx + 1}/{len(data)} images ({skipped[split]} skipped)"
+                        )
+                    continue
+
                 # Copy image
                 dest_img = self.images_dir / split / img_path.name
                 shutil.copy(img_path, dest_img)
-
-                # Re-run pose detection on the crop to get keypoints
-                img_data = cv2.imread(str(img_path))
-                h, w = img_data.shape[:2]
-
-                # Run pose detection on the crop
-                results = self.model(img_data, conf=0.3, verbose=False)
 
                 # Create YOLO annotation
                 ann_path = self.labels_dir / split / f"{img_path.stem}.txt"
@@ -495,39 +535,16 @@ class HockeyPoseDatasetExtractor:
                         "1.0",
                     ]
 
-                    # If we detected a pose in the crop
-                    if (
-                        len(results) > 0
-                        and results[0].keypoints is not None
-                        and len(results[0].keypoints) > 0
-                    ):
-                        # Get the first detection (should be the only one)
-                        kpts = results[0].keypoints[0].data.cpu().numpy().squeeze()
-
-                        # Ensure we have 17 keypoints
-                        if len(kpts) == 17:
-                            # Normalize keypoints to crop size
-                            kpts_normalized = kpts.copy()
-                            kpts_normalized[:, 0] /= w  # normalize x
-                            kpts_normalized[:, 1] /= h  # normalize y
-
-                            # Add keypoints (x, y, visibility for each of 17 points)
-                            for kpt in kpts_normalized:
-                                x, y, v = kpt
-                                line_parts.extend([f"{x:.6f}", f"{y:.6f}", f"{int(v)}"])
-                        else:
-                            # Wrong number of keypoints, use zeros
-                            for _ in range(17):
-                                line_parts.extend(["0.0", "0.0", "0"])
-                    else:
-                        # No keypoints detected, add 17 zero keypoints (invisible)
-                        for _ in range(17):
-                            line_parts.extend(["0.0", "0.0", "0"])
+                    # Add keypoints (x, y, visibility for each of 17 points)
+                    for kpt in kpts_normalized:
+                        x, y, v = kpt
+                        line_parts.extend([f"{x:.6f}", f"{y:.6f}", f"{int(v)}"])
 
                     f.write(" ".join(line_parts) + "\n")
 
-                if (idx + 1) % 100 == 0:
-                    print(f"  Processed {idx + 1}/{len(data)} images")
+                saved_count += 1
+                if saved_count % 100 == 0:
+                    print(f"  Saved {saved_count} images ({skipped[split]} skipped)")
 
         # Create dataset.yaml
         yaml_content = f"""# Hockey Players Pose Dataset
@@ -554,8 +571,12 @@ flip_idx: [0, 2, 1, 4, 3, 6, 5, 8, 7, 10, 9, 12, 11, 14, 13, 16, 15]
         print(f"\n{'='*60}")
         print(f"Dataset exported successfully!")
         print(f"  Dataset YAML: {yaml_path}")
-        print(f"  Training images: {len(train_data)}")
-        print(f"  Validation images: {len(val_data)}")
+        print(
+            f"  Training images: {len(train_data) - skipped['train']} (skipped {skipped['train']})"
+        )
+        print(
+            f"  Validation images: {len(val_data) - skipped['val']} (skipped {skipped['val']})"
+        )
         print(f"\nTo train YOLO11x-pose:")
         print(f"  yolo pose train data={yaml_path} model=yolo11x-pose.pt epochs=100")
         print(f"{'='*60}\n")

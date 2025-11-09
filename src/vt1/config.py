@@ -60,6 +60,17 @@ class Config:
     empty_cache_interval: int
     # Clustering behavior defaults
     save_models_default: bool
+    # Fine-tuning defaults
+    finetuning_output_dir: Path
+    finetuning_models_dir: Path
+    finetuning_frame_interval: int
+    finetuning_max_players_per_video: int
+    finetuning_detection_conf: float
+    finetuning_min_keypoints: int
+    finetuning_train_split: float
+    finetuning_epochs: int
+    finetuning_batch: int
+    finetuning_imgsz: int
 
     def ensure_dirs(self) -> None:
         for p in [
@@ -67,6 +78,8 @@ class Config:
             self.team_models_dir,
             self.pipeline_output_dir,
             self.team_output_dir,
+            self.finetuning_output_dir,
+            self.finetuning_models_dir,
         ]:
             try:
                 p.mkdir(parents=True, exist_ok=True)
@@ -139,6 +152,23 @@ def _coerce_paths(repo_root: Path, raw: Dict[str, Any]) -> Dict[str, Any]:
     out["empty_cache_interval"] = int(raw.get("empty_cache_interval", 0))
     # Clustering behavior defaults
     out["save_models_default"] = bool(raw.get("save_models_default", True))
+    # Fine-tuning defaults
+    out["finetuning_output_dir"] = rp(
+        raw.get("finetuning_output_dir", "hockey_pose_dataset")
+    )
+    out["finetuning_models_dir"] = rp(
+        raw.get("finetuning_models_dir", "models/finetuned")
+    )
+    out["finetuning_frame_interval"] = int(raw.get("finetuning_frame_interval", 30))
+    out["finetuning_max_players_per_video"] = int(
+        raw.get("finetuning_max_players_per_video", 100)
+    )
+    out["finetuning_detection_conf"] = float(raw.get("finetuning_detection_conf", 0.5))
+    out["finetuning_min_keypoints"] = int(raw.get("finetuning_min_keypoints", 5))
+    out["finetuning_train_split"] = float(raw.get("finetuning_train_split", 0.8))
+    out["finetuning_epochs"] = int(raw.get("finetuning_epochs", 100))
+    out["finetuning_batch"] = int(raw.get("finetuning_batch", 8))
+    out["finetuning_imgsz"] = int(raw.get("finetuning_imgsz", 640))
     return out
 
 

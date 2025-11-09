@@ -18,6 +18,11 @@ os.environ["PYINSTALLER_SUPPRESS_WARNINGS"] = "1"
 os.environ["TORCH_COMPILE_DISABLE"] = "1"
 os.environ["TORCHDYNAMO_DISABLE"] = "1"
 
+# Disable PyTorch JIT to prevent runtime parsing errors in frozen executables
+# This fixes: RuntimeError: Expected a single top-level function in torch.nn.functional
+os.environ["PYTORCH_JIT"] = "0"
+os.environ["PYTORCH_JIT_USE_NNC_NOT_NVFUSER"] = "0"
+
 # Fix inspect.getsource() issues in frozen executables
 # PyTorch tries to inspect source code which doesn't exist in frozen apps
 if getattr(sys, "frozen", False):

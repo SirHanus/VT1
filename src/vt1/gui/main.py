@@ -12,6 +12,7 @@ if __package__ is None or __package__ == "":
 from PyQt6 import QtWidgets
 from vt1.gui.pipeline_tab import PipelineTab
 from vt1.gui.clustering_tab import ClusteringTab
+from vt1.gui.finetuning_tab import FinetuningTab
 from vt1.gui.help_tab import HelpTab
 from vt1.gui.startup_dialog import show_startup_dialog, run_training_workflow
 from vt1.config import settings
@@ -27,6 +28,7 @@ class App(QtWidgets.QWidget):
         lay.addWidget(tabs)
         tabs.addTab(PipelineTab(self), "Pipeline")
         tabs.addTab(ClusteringTab(self), "Team Clustering")
+        tabs.addTab(FinetuningTab(self), "Fine-tuning")
         tabs.addTab(HelpTab(self), "Help")
 
     def closeEvent(self, event):
