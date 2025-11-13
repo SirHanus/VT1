@@ -127,6 +127,55 @@ def configure_root_logger(log_dir: Optional[Path] = None, level: int = logging.I
         root_logger.addHandler(file_handler)
 
 
+def ensure_root_logger(log_dir: Optional[Path] = None, level: int = logging.INFO):
+    """Ensure root logger has a file handler; idempotent."""
+    root = logging.getLogger()
+
+    # Derive log directory if not provided
+    if log_dir is None:
+        import sys
+        import os
+
+        frozen = getattr(sys, "frozen", False)
+
+        if frozen:
+            # Running as exe: use AppData/Local/vt1/logs
+            app_data = Path(
+                os.environ.get("LOCALAPPDATA", os.path.expanduser("~/.local"))
+            )
+            log_dir = app_data / "vt1" / "logs"
+        else:
+            # Dev mode: logger.py is at repo_root/src/vt1/logger.py
+            # parents[0] = src/vt1
+            # parents[1] = src
+            # parents[2] = repo_root (D:\WORK\VT1)
+            repo_root = Path(__file__).resolve().parents[2]
+            log_dir = repo_root / "logs"
+
+    # Check if we already have a FileHandler pointing to app.log
+    log_file = log_dir / "app.log"
+    for handler in root.handlers:
+        if isinstance(handler, logging.FileHandler):
+            if Path(handler.baseFilename).resolve() == log_file.resolve():
+                return  # Already configured
+
+    # Create directory and add file handler
+    log_dir.mkdir(parents=True, exist_ok=True)
+    file_handler = logging.FileHandler(log_file, encoding="utf-8")
+    file_handler.setLevel(logging.DEBUG)
+    file_format = logging.Formatter(
+        "%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S",
+    )
+    file_handler.setFormatter(file_format)
+    root.addHandler(file_handler)
+
+    if root.level > level:
+        root.setLevel(level)
+
+    print(f"✓ Root logger configured with file handler: {log_file}")
+
+
 def get_logger(name: str) -> logging.Logger:
     """
     Get a logger instance for a module.

@@ -38,6 +38,8 @@ echo [INFO] Building Pipeline executable (console mode)...
   --hidden-import vt1.pipeline.sam_general ^
   --hidden-import vt1.pipeline.sam_offline ^
   --collect-all torch ^
+  --icon "%~dp0..\assets\vt1.ico" ^
+  --add-data "%~dp0..\assets\vt1.ico;assets" ^
   --noupx ^
   src\vt1\pipeline\sam_offline.py
 
@@ -71,7 +73,9 @@ echo [INFO] Building GUI executable (windowed mode)...
   --add-data "%~dp0..\GUI.md;." ^
   --add-data "%~dp0..\README.md;." ^
   --add-data "%~dp0..\config_defaults.toml;." ^
+  --add-data "%~dp0..\assets\vt1.ico;assets" ^
   --collect-all torch ^
+  --icon "%~dp0..\assets\vt1.ico" ^
   --noupx ^
   --windowed ^
   src\vt1\gui\main.py

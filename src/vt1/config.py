@@ -92,17 +92,35 @@ class Config:
 
 
 def _repo_root() -> Path:
-    here = Path(__file__).resolve()
-    for parent in [here] + list(here.parents):
+    """Get the repository root directory.
+    In dev: finds pyproject.toml parent.
+    When frozen: uses AppData/Local/vt1 as the 'root'.
+    """
+    import sys
+
+    frozen = getattr(sys, "frozen", False)
+
+    if frozen:
+        # Running as exe: use AppData/Local/vt1 as root for all data
+        import os
+
+        app_data = Path(os.environ.get("LOCALAPPDATA", os.path.expanduser("~/.local")))
+        return app_data / "vt1"
+
+    # Dev mode: find repo root via pyproject.toml
+    current = Path(__file__).resolve()
+    for parent in current.parents:
         if (parent / "pyproject.toml").exists():
             return parent
-    return Path.cwd()
+    # Fallback to current file's grandparent (src/vt1 -> src -> repo_root)
+    return current.parents[2]
 
 
 def _read_toml(path: Path) -> Dict[str, Any]:
+    """Read TOML file, return empty dict if not found."""
     if not path.exists():
         return {}
-    with path.open("rb") as f:
+    with open(path, "rb") as f:
         return tomllib.load(f)
 
 

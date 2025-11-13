@@ -3,6 +3,8 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
+from PyQt6.QtGui import QIcon
+
 # Ensure package path when run as a script (no package context)
 if __package__ is None or __package__ == "":
     src_dir = Path(__file__).resolve().parents[2]  # .../src
@@ -16,6 +18,19 @@ from vt1.gui.finetuning_tab import FinetuningTab
 from vt1.gui.help_tab import HelpTab
 from vt1.gui.startup_dialog import show_startup_dialog, run_training_workflow
 from vt1.config import settings
+import logging
+from vt1.logger import get_logger
+
+
+def resource_path(relative: str) -> str:
+    """Resolve path to resource for dev and PyInstaller onefile.
+    If running frozen, sys._MEIPASS contains extracted bundle. Otherwise use repo root.
+    """
+    base = getattr(sys, "_MEIPASS", None)
+    if base:
+        return str(Path(base) / relative)
+    # dev: repo root is 2 parents up from this file's directory
+    return str(Path(__file__).resolve().parents[2] / relative)
 
 
 class App(QtWidgets.QWidget):
@@ -64,7 +79,13 @@ def mark_setup_skipped():
 
 def main():
     app = QtWidgets.QApplication(sys.argv)
-
+    # Set window icon; fallback if missing
+    icon_path = resource_path("assets/vt1.ico")
+    if Path(icon_path).exists():
+        app.setWindowIcon(QIcon(icon_path))
+    else:
+        # optional: silent fallback
+        pass
     # Show startup dialog if first run
     if check_first_run():
         choice = show_startup_dialog()
@@ -106,30 +127,33 @@ def main():
 
 if __name__ == "__main__":
     import multiprocessing
+    import runpy
 
     multiprocessing.freeze_support()
 
-    # Headless dispatcher: allow running modules via the frozen GUI exe without opening a window
-    # Usage: vt1-gui.exe --module-run <module.name> [args...]
-    if len(sys.argv) > 1 and sys.argv[1] == "--module-run":
-        import runpy
+    # Initialize logging BEFORE checking headless mode so both paths log.
+    from vt1.logger import ensure_root_logger
 
+    ensure_root_logger(level=logging.INFO)  # Auto-detects frozen vs dev mode
+    _app_logger = get_logger("gui.main")
+    print("VT1 GUI starting...")
+    if len(sys.argv) > 1 and sys.argv[1] == "--module-run":
         if len(sys.argv) < 3:
             print("Usage: --module-run <module> [args...]", file=sys.stderr)
             sys.exit(2)
         module_name = sys.argv[2]
         module_args = sys.argv[3:]
-        # Simulate `python -m module_name [args...]`
+        _app_logger.info("Headless module run start: %s %s", module_name, module_args)
         sys.argv = [module_name] + module_args
         try:
             runpy.run_module(module_name, run_name="__main__", alter_sys=True)
+            _app_logger.info("Headless module run completed: %s", module_name)
             sys.exit(0)
-        except SystemExit as e:
-            # Propagate exit codes from the target module
+        except SystemExit:
             raise
         except Exception as e:
-            print(f"[GUI] Headless module-run failed: {e}", file=sys.stderr)
+            _app_logger.exception("Headless module-run failed: %s", e)
             sys.exit(1)
 
-    # Otherwise, launch the GUI normally
+    _app_logger.info("GUI main starting (frozen=%s)", getattr(sys, "frozen", False))
     main()

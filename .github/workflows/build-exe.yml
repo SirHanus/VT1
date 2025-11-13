@@ -55,7 +55,7 @@ jobs:
         shell: cmd
         run: |
           REM Pipeline (onefile)
-          pyinstaller --clean --noconfirm --onefile ^
+          pyinstaller --noconfirm --onefile ^
             --name vt1-pipeline ^
             --paths src ^
             --additional-hooks-dir hooks ^
@@ -63,14 +63,16 @@ jobs:
             --hidden-import vt1.pipeline.sam_general ^
             --hidden-import vt1.pipeline.sam_offline ^
             --collect-all torch ^
+            --icon assets\vt1.ico ^
+            --add-data "assets\vt1.ico;assets" ^
             --noupx ^
             src\vt1\pipeline\sam_offline.py
           REM GUI (onefile)
-          pyinstaller --clean --noconfirm --onefile ^
+          pyinstaller --noconfirm --onefile ^
             --name vt1-gui ^
-            --paths src ^
             --additional-hooks-dir hooks ^
             --runtime-hook hooks\rthook_suppress_torch_warnings.py ^
+            --paths src ^
             --hidden-import vt1.gui.pipeline_tab ^
             --hidden-import vt1.gui.clustering_tab ^
             --hidden-import vt1.gui.help_tab ^
@@ -86,7 +88,9 @@ jobs:
             --add-data "GUI.md;." ^
             --add-data "README.md;." ^
             --add-data "config_defaults.toml;." ^
+            --add-data "assets\vt1.ico;assets" ^
             --collect-all torch ^
+            --icon assets\vt1.ico ^
             --noupx ^
             --windowed ^
             src\vt1\gui\main.py

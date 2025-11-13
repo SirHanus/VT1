@@ -502,7 +502,7 @@ def main() -> int:
     if args.seed:
         torch.manual_seed(args.seed)
         np.random.seed(args.seed)
-
+    logger.info(f"Using device: {args.device}")
     device = args.device
     if device == "cuda" and not torch.cuda.is_available():
         device = "cpu"
