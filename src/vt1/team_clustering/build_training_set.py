@@ -21,7 +21,6 @@ import numpy as np
 import torch
 from PIL import Image
 from tqdm import tqdm
-# Transformers (SigLIP)
 from transformers import AutoImageProcessor
 
 from vt1.config import settings
