@@ -15,6 +15,7 @@ jobs:
     env:
       PYINSTALLER_NO_UPX: '1'  # ensure no UPX compression
       QT_QPA_PLATFORM: offscreen  # avoid GUI needing a display when smoke testing (if added later)
+      PYTORCH_JIT: '0'  # disable TorchScript JIT to prevent overload parser RuntimeError in frozen app
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -50,31 +51,22 @@ jobs:
           pip install .[build]
           pip list
 
-      - name: Build executables (onedir + onefile; no strip)
+      - name: Build executables (onefile only)
         shell: cmd
         run: |
-          REM Pipeline (onedir)
-          pyinstaller --clean --noconfirm --onedir ^
+          REM Pipeline (onefile)
+          pyinstaller --clean --noconfirm --onefile ^
             --name vt1-pipeline ^
             --paths src ^
             --additional-hooks-dir hooks ^
             --runtime-hook hooks\rthook_suppress_torch_warnings.py ^
             --hidden-import vt1.pipeline.sam_general ^
             --hidden-import vt1.pipeline.sam_offline ^
+            --collect-all torch ^
             --noupx ^
             src\vt1\pipeline\sam_offline.py
-          REM Pipeline (onefile)
+          REM GUI (onefile)
           pyinstaller --clean --noconfirm --onefile ^
-            --name vt1-pipeline-onefile ^
-            --paths src ^
-            --additional-hooks-dir hooks ^
-            --runtime-hook hooks\rthook_suppress_torch_warnings.py ^
-            --hidden-import vt1.pipeline.sam_general ^
-            --hidden-import vt1.pipeline.sam_offline ^
-            --noupx ^
-            src\vt1\pipeline\sam_offline.py
-          REM GUI (onedir)
-          pyinstaller --clean --noconfirm --onedir ^
             --name vt1-gui ^
             --paths src ^
             --additional-hooks-dir hooks ^
@@ -86,22 +78,7 @@ jobs:
             --add-data "GUI.md;." ^
             --add-data "README.md;." ^
             --add-data "config_defaults.toml;." ^
-            --noupx ^
-            --windowed ^
-            src\vt1\gui\main.py
-          REM GUI (onefile)
-          pyinstaller --clean --noconfirm --onefile ^
-            --name vt1-gui-onefile ^
-            --paths src ^
-            --additional-hooks-dir hooks ^
-            --runtime-hook hooks\rthook_suppress_torch_warnings.py ^
-            --hidden-import vt1.gui.pipeline_tab ^
-            --hidden-import vt1.gui.clustering_tab ^
-            --hidden-import vt1.gui.help_tab ^
-            --hidden-import vt1.gui.startup_dialog ^
-            --add-data "GUI.md;." ^
-            --add-data "README.md;." ^
-            --add-data "config_defaults.toml;." ^
+            --collect-all torch ^
             --noupx ^
             --windowed ^
             src\vt1\gui\main.py
@@ -116,23 +93,19 @@ jobs:
           echo Creating small smoke.mp4 video for pipeline test
           python -c "import cv2, numpy as np, sys; fourcc=cv2.VideoWriter_fourcc(*'mp4v'); out=cv2.VideoWriter('smoke.mp4', fourcc, 10.0, (320,240)); [out.write((np.random.rand(240,320,3)*255).astype('uint8')) for _ in range(20)]; out.release(); print('Created smoke.mp4')"
 
-      - name: Smoke test pipeline executables (CPU, few frames)
+      - name: Smoke test pipeline executable (CPU, few frames)
         shell: cmd
         run: |
-          echo Running onefile pipeline smoke test
-          dist\vt1-pipeline-onefile.exe --source smoke.mp4 --device cpu --max-frames 5 --no-sam --disable-team || exit /b 1
-          echo Running onedir pipeline smoke test
-          dist\vt1-pipeline\vt1-pipeline.exe --source smoke.mp4 --device cpu --max-frames 5 --no-sam --disable-team || exit /b 1
+          echo Running pipeline smoke test
+          dist\vt1-pipeline.exe --source smoke.mp4 --device cpu --max-frames 5 --no-sam --disable-team || exit /b 1
 
-      - name: Upload artifacts (executables and onedir folders)
+      - name: Upload artifacts (executables)
         uses: actions/upload-artifact@v4
         with:
           name: vt1-windows-executables
           path: |
-            dist/vt1-pipeline-onefile.exe
-            dist/vt1-gui-onefile.exe
-            dist/vt1-pipeline/**
-            dist/vt1-gui/**
+            dist/vt1-pipeline.exe
+            dist/vt1-gui.exe
 
       - name: Upload build logs (optional)
         if: always()
@@ -141,3 +114,4 @@ jobs:
           name: pyinstaller-build-logs
           path: build/**
           if-no-files-found: ignore
+
