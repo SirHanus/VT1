@@ -18,8 +18,7 @@ class ClusteringTab(QtWidgets.QWidget):
         vlay.addWidget(self.tabs)
         self.tabs.addTab(self._make_build_tab(), "Build Set")
         self.tabs.addTab(self._make_cluster_tab(), "Cluster")
-        self.tabs.addTab(self._make_audit_tab(), "Audit")
-        self.tabs.addTab(self._make_eval_tab(), "Evaluate")
+        self.tabs.addTab(self._make_audit_eval_tab(), "Audit & Evaluate")
 
     def _repo_root(self) -> Path:
         return Path(__file__).resolve().parents[2]
@@ -66,6 +65,8 @@ class ClusteringTab(QtWidgets.QWidget):
             QtWidgets.QMessageBox.critical(self, "Failed", str(e))
             return
         widgets["run"].setEnabled(False)
+        if "run_eval" in widgets:
+            widgets["run_eval"].setEnabled(False)
         widgets["stop"].setEnabled(True)
 
     def _stop(self, widgets: dict):
@@ -79,6 +80,8 @@ class ClusteringTab(QtWidgets.QWidget):
                 p.waitForFinished(2000)
         widgets["proc"] = None
         widgets["run"].setEnabled(True)
+        if "run_eval" in widgets:
+            widgets["run_eval"].setEnabled(True)
         widgets["stop"].setEnabled(False)
         widgets["progress"].setRange(0, 100)
         widgets["progress"].setValue(0)
@@ -117,6 +120,8 @@ class ClusteringTab(QtWidgets.QWidget):
         widgets["log"].appendPlainText(f"[GUI] Finished code={code}")
         widgets["proc"] = None
         widgets["run"].setEnabled(True)
+        if "run_eval" in widgets:
+            widgets["run_eval"].setEnabled(True)
         widgets["stop"].setEnabled(False)
         widgets["progress"].setRange(0, 100)
         widgets["progress"].setValue(100 if code == 0 else 0)
@@ -484,12 +489,50 @@ class ClusteringTab(QtWidgets.QWidget):
             args.append("--save-models")
         return [str(a) for a in args]
 
-    # Audit tab
-    def _make_audit_tab(self) -> QtWidgets.QWidget:
+    def _args_audit(self, in_root, out_dir, per_video, save_grid, seed):
+        args = []
+        args.extend(["--in-root", in_root])
+        args.extend(["--out-dir", out_dir])
+        args.extend(["--per-video", str(per_video)])
+        if save_grid:
+            args.append("--save-grid")
+        args.extend(["--seed", str(seed)])
+        return [str(a) for a in args]
+
+    # Audit & Evaluate merged tab
+    def _make_audit_eval_tab(self) -> QtWidgets.QWidget:
         w = QtWidgets.QWidget()
         lay = QtWidgets.QVBoxLayout(w)
-        form = QtWidgets.QFormLayout()
-        base = settings().team_output_dir
+
+        # Shared parameters section
+        shared_group = QtWidgets.QGroupBox("Shared Parameters")
+        shared_form = QtWidgets.QFormLayout()
+        cfg = settings()
+        base = cfg.team_output_dir
+
+        ed_out_dir = QtWidgets.QLineEdit(str(base))
+        ed_out_dir.setToolTip("Output directory root (--out-dir)")
+        btn_out_dir = QtWidgets.QPushButton("Browse…")
+        btn_out_dir.setToolTip("Pick output dir")
+        btn_out_dir.clicked.connect(lambda: self._pick_dir_into(ed_out_dir))
+        shared_form.addRow("Out dir (--out-dir)", self._row(ed_out_dir, btn_out_dir))
+
+        cb_save_grid = QtWidgets.QCheckBox("Save mosaic grid")
+        cb_save_grid.setToolTip("Save mosaic grid images (--save-grid)")
+        shared_form.addRow("Save grid (--save-grid)", cb_save_grid)
+
+        sb_seed = QtWidgets.QSpinBox()
+        sb_seed.setRange(0, 10_000)
+        sb_seed.setToolTip("Random seed (--seed)")
+        shared_form.addRow("Seed (--seed)", sb_seed)
+
+        shared_group.setLayout(shared_form)
+        lay.addWidget(shared_group)
+
+        # Audit parameters
+        audit_group = QtWidgets.QGroupBox("Audit Training Set Parameters")
+        audit_form = QtWidgets.QFormLayout()
+
         ed_in_root = QtWidgets.QLineEdit(str(base))
         ed_in_root.setToolTip(
             "Root folder containing per-video subfolders with index.csv (and crops/ if saved) (--in-root)"
@@ -497,52 +540,155 @@ class ClusteringTab(QtWidgets.QWidget):
         btn_in_root = QtWidgets.QPushButton("Browse…")
         btn_in_root.setToolTip("Pick input root")
         btn_in_root.clicked.connect(lambda: self._pick_dir_into(ed_in_root))
-        form.addRow("In root (--in-root)", self._row(ed_in_root, btn_in_root))
-        ed_out_dir = QtWidgets.QLineEdit(str(base))
-        ed_out_dir.setToolTip("Output directory root (--out-dir)")
-        btn_out_dir = QtWidgets.QPushButton("Browse…")
-        btn_out_dir.setToolTip("Pick output dir")
-        btn_out_dir.clicked.connect(lambda: self._pick_dir_into(ed_out_dir))
-        form.addRow("Out dir (--out-dir)", self._row(ed_out_dir, btn_out_dir))
+        audit_form.addRow("In root (--in-root)", self._row(ed_in_root, btn_in_root))
+
         sb_per_video = QtWidgets.QSpinBox()
         sb_per_video.setRange(1, 200)
         sb_per_video.setValue(24)
         sb_per_video.setToolTip(
             "Max crops per video to include in mosaic (--per-video)"
         )
-        form.addRow("Per-video (--per-video)", sb_per_video)
-        cb_save_grid = QtWidgets.QCheckBox("Save per-video mosaics")
-        cb_save_grid.setToolTip("Save per-video grid mosaics (--save-grid)")
-        form.addRow("Save grid (--save-grid)", cb_save_grid)
-        sb_seed = QtWidgets.QSpinBox()
-        sb_seed.setRange(0, 10_000)
-        sb_seed.setToolTip("Random seed for sampling (--seed)")
-        form.addRow("Seed (--seed)", sb_seed)
-        lay.addLayout(form)
+        audit_form.addRow("Per-video (--per-video)", sb_per_video)
+
+        audit_group.setLayout(audit_form)
+        lay.addWidget(audit_group)
+
+        # Evaluate parameters
+        eval_group = QtWidgets.QGroupBox("Evaluate Clustering Parameters")
+        eval_form = QtWidgets.QFormLayout()
+
+        ed_images_dir = QtWidgets.QLineEdit("")
+        ed_images_dir.setToolTip("Directory of test images (--images-dir)")
+        btn_images_dir = QtWidgets.QPushButton("Browse…")
+        btn_images_dir.setToolTip("Pick images dir")
+        btn_images_dir.clicked.connect(lambda: self._pick_dir_into(ed_images_dir))
+        eval_form.addRow(
+            "Images dir (--images-dir)", self._row(ed_images_dir, btn_images_dir)
+        )
+
+        ed_glob = QtWidgets.QLineEdit("*.jpg;*.png;*.jpeg;*.JPG;*.PNG;*.JPEG")
+        ed_glob.setToolTip("Semicolon-separated patterns for images (--glob)")
+        eval_form.addRow("Glob (--glob)", ed_glob)
+
+        ed_video = QtWidgets.QLineEdit(str(cfg.default_video_source))
+        ed_video.setToolTip("Video file (--video)")
+        btn_video = QtWidgets.QPushButton("Browse…")
+        btn_video.setToolTip("Pick video file")
+        btn_video.clicked.connect(
+            lambda: self._pick_file_into(ed_video, "Video (*.mp4 *.avi *.mkv);;All (*)")
+        )
+        eval_form.addRow("Video (--video)", self._row(ed_video, btn_video))
+
+        sb_frame_step = QtWidgets.QSpinBox()
+        sb_frame_step.setRange(1, 10_000)
+        sb_frame_step.setValue(int(cfg.eval_frame_step))
+        sb_frame_step.setToolTip("Frame step (--frame-step)")
+        eval_form.addRow("Frame step (--frame-step)", sb_frame_step)
+
+        sb_max_frames = QtWidgets.QSpinBox()
+        sb_max_frames.setRange(0, 100_000)
+        sb_max_frames.setToolTip("Stop after N frames sampled (0=all) (--max-frames)")
+        eval_form.addRow("Max frames (--max-frames)", sb_max_frames)
+
+        ed_team_models = QtWidgets.QLineEdit(str(cfg.team_models_dir))
+        ed_team_models.setToolTip("Folder with umap.pkl and kmeans.pkl (--team-models)")
+        btn_team_models = QtWidgets.QPushButton("Browse dir…")
+        btn_team_models.setToolTip("Pick team models directory")
+        btn_team_models.clicked.connect(lambda: self._pick_dir_into(ed_team_models))
+        eval_form.addRow(
+            "Team models (--team-models)", self._row(ed_team_models, btn_team_models)
+        )
+
+        ed_siglip = QtWidgets.QLineEdit(str(cfg.siglip_model))
+        ed_siglip.setToolTip("SigLIP model id (--siglip)")
+        eval_form.addRow("SigLIP (--siglip)", ed_siglip)
+
+        ed_yolo_model = QtWidgets.QLineEdit(str(cfg.yolo_model))
+        ed_yolo_model.setToolTip("YOLO detection model (--yolo-model)")
+        btn_yolo_model = QtWidgets.QPushButton("Browse…")
+        btn_yolo_model.setToolTip("Pick YOLO model")
+        btn_yolo_model.clicked.connect(
+            lambda: self._pick_file_into(ed_yolo_model, "Model (*.pt *.onnx);;All (*)")
+        )
+        eval_form.addRow(
+            "YOLO model (--yolo-model)", self._row(ed_yolo_model, btn_yolo_model)
+        )
+
+        sb_imgsz = QtWidgets.QSpinBox()
+        sb_imgsz.setRange(64, 4096)
+        sb_imgsz.setValue(int(cfg.yolo_imgsz))
+        sb_imgsz.setToolTip("YOLO inference size (--imgsz)")
+        eval_form.addRow("YOLO imgsz (--imgsz)", sb_imgsz)
+
+        ds_conf = QtWidgets.QDoubleSpinBox()
+        ds_conf.setRange(0.0, 1.0)
+        ds_conf.setSingleStep(0.01)
+        ds_conf.setValue(float(cfg.yolo_conf))
+        ds_conf.setToolTip("YOLO confidence (--conf)")
+        eval_form.addRow("YOLO conf (--conf)", ds_conf)
+
+        sb_max_boxes = QtWidgets.QSpinBox()
+        sb_max_boxes.setRange(1, 100)
+        sb_max_boxes.setValue(int(cfg.yolo_max_boxes))
+        sb_max_boxes.setToolTip("Max boxes (--max-boxes)")
+        eval_form.addRow("Max boxes (--max-boxes)", sb_max_boxes)
+
+        ds_central = QtWidgets.QDoubleSpinBox()
+        ds_central.setRange(0.05, 1.0)
+        ds_central.setSingleStep(0.05)
+        ds_central.setValue(float(cfg.central_ratio_default))
+        ds_central.setToolTip("Central crop ratio (--central-ratio)")
+        eval_form.addRow("Central ratio (--central-ratio)", ds_central)
+
+        cb_device = QtWidgets.QComboBox()
+        cb_device.addItems(["cuda", "cpu"])
+        cb_device.setToolTip("cuda or cpu (--device)")
+        eval_form.addRow("Device (--device)", cb_device)
+
+        cb_show = QtWidgets.QCheckBox("Show preview window")
+        cb_show.setToolTip("Show previews in a window (--show)")
+        eval_form.addRow("Show (--show)", cb_show)
+
+        sb_limit_images = QtWidgets.QSpinBox()
+        sb_limit_images.setRange(1, 10_000)
+        sb_limit_images.setValue(int(cfg.eval_limit_images))
+        sb_limit_images.setToolTip("Max annotated images (--limit-images)")
+        eval_form.addRow("Limit images (--limit-images)", sb_limit_images)
+
+        eval_group.setLayout(eval_form)
+        lay.addWidget(eval_group)
+
+        # Run controls
         run = QtWidgets.QHBoxLayout()
-        btn_run = QtWidgets.QPushButton("Run Audit")
+        btn_run_audit = QtWidgets.QPushButton("Run Audit")
+        btn_run_eval = QtWidgets.QPushButton("Run Eval")
         btn_stop = QtWidgets.QPushButton("Stop")
         btn_stop.setEnabled(False)
         status = QtWidgets.QLabel("Idle")
         pb = QtWidgets.QProgressBar()
         pb.setRange(0, 0)
-        run.addWidget(btn_run)
+        run.addWidget(btn_run_audit)
+        run.addWidget(btn_run_eval)
         run.addWidget(btn_stop)
         run.addWidget(status)
         run.addWidget(pb)
         lay.addLayout(run)
+
         log = QtWidgets.QPlainTextEdit()
         log.setReadOnly(True)
         lay.addWidget(log, 1)
+
         widgets = {
             "proc": None,
-            "run": btn_run,
+            "run": btn_run_audit,
+            "run_eval": btn_run_eval,
             "stop": btn_stop,
             "status": status,
             "progress": pb,
             "log": log,
         }
-        btn_run.clicked.connect(
+
+        btn_run_audit.clicked.connect(
             lambda: self._start(
                 "vt1.team_clustering.audit_training_set",
                 self._args_audit(
@@ -555,130 +701,6 @@ class ClusteringTab(QtWidgets.QWidget):
                 widgets,
             )
         )
-        btn_stop.clicked.connect(lambda: self._stop(widgets))
-        return w
-
-    def _args_audit(self, in_root, out_dir, per_video, save_grid, seed):
-        args = []
-        args.extend(["--in-root", in_root])
-        args.extend(["--out-dir", out_dir])
-        args.extend(["--per-video", per_video])
-        if save_grid:
-            args.append("--save-grid")
-            args.extend(["--seed", seed])
-        return [str(a) for a in args]
-
-    # Evaluate tab
-    def _make_eval_tab(self) -> QtWidgets.QWidget:
-        w = QtWidgets.QWidget()
-        lay = QtWidgets.QVBoxLayout(w)
-        form = QtWidgets.QFormLayout()
-        cfg = settings()
-        root = cfg.repo_root
-        ed_images_dir = QtWidgets.QLineEdit("")
-        ed_images_dir.setToolTip("Directory of test images (--images-dir)")
-        btn_images_dir = QtWidgets.QPushButton("Browse…")
-        btn_images_dir.setToolTip("Pick images dir")
-        btn_images_dir.clicked.connect(lambda: self._pick_dir_into(ed_images_dir))
-        form.addRow(
-            "Images dir (--images-dir)", self._row(ed_images_dir, btn_images_dir)
-        )
-        ed_glob = QtWidgets.QLineEdit("*.jpg;*.png;*.jpeg;*.JPG;*.PNG;*.JPEG")
-        ed_glob.setToolTip("Semicolon-separated patterns for images (--glob)")
-        form.addRow("Glob (--glob)", ed_glob)
-        ed_video = QtWidgets.QLineEdit(str(cfg.default_video_source))
-        ed_video.setToolTip("Video file (--video)")
-        btn_video = QtWidgets.QPushButton("Browse…")
-        btn_video.setToolTip("Pick video file")
-        btn_video.clicked.connect(
-            lambda: self._pick_file_into(ed_video, "Video (*.mp4 *.avi *.mkv);;All (*)")
-        )
-        form.addRow("Video (--video)", self._row(ed_video, btn_video))
-        sb_frame_step = QtWidgets.QSpinBox()
-        sb_frame_step.setRange(1, 10_000)
-        sb_frame_step.setValue(int(cfg.eval_frame_step))
-        sb_frame_step.setToolTip("Frame step (--frame-step)")
-        form.addRow("Frame step (--frame-step)", sb_frame_step)
-        sb_max_frames = QtWidgets.QSpinBox()
-        sb_max_frames.setRange(0, 100_000)
-        sb_max_frames.setToolTip("Stop after N frames sampled (0=all) (--max-frames)")
-        form.addRow("Max frames (--max-frames)", sb_max_frames)
-        ed_team_models = QtWidgets.QLineEdit(str(cfg.team_models_dir))
-        ed_team_models.setToolTip("Folder with umap.pkl and kmeans.pkl (--team-models)")
-        btn_team_models = QtWidgets.QPushButton("Browse dir…")
-        btn_team_models.setToolTip("Pick team models directory")
-        btn_team_models.clicked.connect(lambda: self._pick_dir_into(ed_team_models))
-        form.addRow(
-            "Team models (--team-models)", self._row(ed_team_models, btn_team_models)
-        )
-        ed_siglip = QtWidgets.QLineEdit(str(cfg.siglip_model))
-        ed_siglip.setToolTip("SigLIP model id (--siglip)")
-        ed_yolo_model = QtWidgets.QLineEdit(str(cfg.yolo_model))
-        ed_yolo_model.setToolTip("YOLO detection model (--yolo-model)")
-        sb_imgsz = QtWidgets.QSpinBox()
-        sb_imgsz.setRange(64, 4096)
-        sb_imgsz.setValue(int(cfg.yolo_imgsz))
-        sb_imgsz.setToolTip("YOLO inference size (--imgsz)")
-        ds_conf = QtWidgets.QDoubleSpinBox()
-        ds_conf.setRange(0.0, 1.0)
-        ds_conf.setSingleStep(0.01)
-        ds_conf.setValue(float(cfg.yolo_conf))
-        ds_conf.setToolTip("YOLO confidence (--conf)")
-        sb_max_boxes = QtWidgets.QSpinBox()
-        sb_max_boxes.setRange(1, 100)
-        sb_max_boxes.setValue(int(cfg.yolo_max_boxes))
-        sb_max_boxes.setToolTip("Max boxes (--max-boxes)")
-        ds_central = QtWidgets.QDoubleSpinBox()
-        ds_central.setRange(0.05, 1.0)
-        ds_central.setSingleStep(0.05)
-        ds_central.setValue(float(cfg.central_ratio_default))
-        ds_central.setToolTip("Central crop ratio (--central-ratio)")
-        # New: device, show, save-grid controls
-        cb_device = QtWidgets.QComboBox()
-        cb_device.addItems(["cuda", "cpu"])
-        cb_device.setToolTip("cuda or cpu (--device)")
-        form.addRow("Device (--device)", cb_device)
-        ed_out_dir = QtWidgets.QLineEdit(str(cfg.team_output_dir))
-        ed_out_dir.setToolTip("Output directory root (--out-dir)")
-        btn_out_dir = QtWidgets.QPushButton("Browse…")
-        btn_out_dir.setToolTip("Pick output dir")
-        btn_out_dir.clicked.connect(lambda: self._pick_dir_into(ed_out_dir))
-        form.addRow("Out dir (--out-dir)", self._row(ed_out_dir, btn_out_dir))
-        cb_show = QtWidgets.QCheckBox("Show preview window")
-        cb_show.setToolTip("Show previews in a window (--show)")
-        form.addRow("Show (--show)", cb_show)
-        cb_save_grid = QtWidgets.QCheckBox("Save mosaic grid")
-        cb_save_grid.setToolTip("Save a mosaic grid of annotated images (--save-grid)")
-        form.addRow("Save grid (--save-grid)", cb_save_grid)
-        sb_limit_images = QtWidgets.QSpinBox()
-        sb_limit_images.setRange(1, 10_000)
-        sb_limit_images.setValue(int(cfg.eval_limit_images))
-        sb_limit_images.setToolTip("Max annotated images (--limit-images)")
-        form.addRow("Limit images (--limit-images)", sb_limit_images)
-        lay.addLayout(form)
-        run = QtWidgets.QHBoxLayout()
-        btn_run = QtWidgets.QPushButton("Run Eval")
-        btn_stop = QtWidgets.QPushButton("Stop")
-        btn_stop.setEnabled(False)
-        status = QtWidgets.QLabel("Idle")
-        pb = QtWidgets.QProgressBar()
-        pb.setRange(0, 0)
-        run.addWidget(btn_run)
-        run.addWidget(btn_stop)
-        run.addWidget(status)
-        run.addWidget(pb)
-        lay.addLayout(run)
-        log = QtWidgets.QPlainTextEdit()
-        log.setReadOnly(True)
-        lay.addWidget(log, 1)
-        widgets = {
-            "proc": None,
-            "run": btn_run,
-            "stop": btn_stop,
-            "status": status,
-            "progress": pb,
-            "log": log,
-        }
 
         def _run_eval():
             if not self._preflight_eval_models(ed_team_models.text()):
@@ -707,7 +729,7 @@ class ClusteringTab(QtWidgets.QWidget):
                 widgets,
             )
 
-        btn_run.clicked.connect(_run_eval)
+        btn_run_eval.clicked.connect(_run_eval)
         btn_stop.clicked.connect(lambda: self._stop(widgets))
         return w
 

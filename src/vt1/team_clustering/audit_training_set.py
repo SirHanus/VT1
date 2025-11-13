@@ -1,5 +1,5 @@
 # python
-"""
+r"""
 Audit and visualize the training data produced by build_training_set.py.
 - Scans per-video folders under --in-root (default: team_clustering/clustering)
 - Loads index.csv and, if available, crops/*.jpg referenced by crop_relpath
@@ -61,6 +61,11 @@ def parse_args() -> argparse.Namespace:
         "--save-grid", action="store_true", help="Save per-video grid mosaics"
     )
     ap.add_argument("--seed", type=int, default=0, help="Random seed for sampling")
+    ap.add_argument(
+        "--show-hint",
+        action="store_true",
+        help="Show hint about using --save-crops if no crops were found",
+    )
     return ap.parse_args()
 
 
@@ -185,7 +190,10 @@ def main() -> int:
 
     logger.info(f"Audit done. Output: {out_root}")
     logger.info(json.dumps(global_stats, indent=2))
-    if args.show_hint and global_stats.get("with_crops_saved", 0) == 0:
+    if (
+        getattr(args, "show_hint", False)
+        and global_stats.get("with_crops_saved", 0) == 0
+    ):
         logger.warning(
             "No crops saved. Re-run build_training_set.py with --save-crops to enable visual audit."
         )
