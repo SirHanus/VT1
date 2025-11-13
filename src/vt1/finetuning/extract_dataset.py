@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import logging
 import shutil
 from pathlib import Path
 from typing import Dict, List, Tuple
@@ -26,6 +27,14 @@ try:
     from vt1.config import settings
 except ImportError:
     settings = None
+
+try:
+    from vt1.logger import get_logger
+
+    logger = get_logger(__name__)
+except ImportError:
+    logging.basicConfig(level=logging.INFO, format="[%(levelname)s] %(message)s")
+    logger = logging.getLogger(__name__)
 
 
 class HockeyPoseDatasetExtractor:
@@ -108,7 +117,7 @@ class HockeyPoseDatasetExtractor:
         total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
         fps = cap.get(cv2.CAP_PROP_FPS)
 
-        print(f"Video: {total_frames} frames @ {fps:.2f} fps")
+        logger.info(f"Video: {total_frames} frames @ {fps:.2f} fps")
 
         while cap.isOpened():
             ret, frame = cap.read()
@@ -289,13 +298,13 @@ class HockeyPoseDatasetExtractor:
         """
         video_path = Path(video_path)
         video_name = video_path.stem
-        print(f"\n{'='*60}")
-        print(f"Processing: {video_name}")
-        print(f"{'='*60}")
+        logger.info("=" * 60)
+        logger.info(f"Processing: {video_name}")
+        logger.info("=" * 60)
 
         # Extract frames
         frames = self.extract_frames(str(video_path), frame_interval, max_frames=None)
-        print(f"Extracted {len(frames)} frames at interval={frame_interval}")
+        logger.info(f"Extracted {len(frames)} frames at interval={frame_interval}")
 
         # Process each frame until we have enough players
         total_detections = 0
@@ -304,7 +313,7 @@ class HockeyPoseDatasetExtractor:
 
         for idx, (frame_num, frame) in enumerate(frames):
             if total_detections >= max_players:
-                print(f"Reached max players ({max_players}), stopping.")
+                logger.info(f"Reached max players ({max_players}), stopping.")
                 break
 
             detections = self.detect_players_with_pose(frame)
@@ -338,7 +347,7 @@ class HockeyPoseDatasetExtractor:
 
             # Progress update
             if (idx + 1) % 10 == 0:
-                print(
+                logger.info(
                     f"Processed {idx + 1}/{len(frames)} frames ({total_detections}/{max_players} players)"
                 )
 
@@ -358,13 +367,13 @@ class HockeyPoseDatasetExtractor:
         with open(metadata_path, "w") as f:
             json.dump(metadata, f, indent=2)
 
-        print(f"\n{'='*60}")
-        print(f"Summary for {video_name}:")
-        print(f"  Frames processed: {idx + 1}")
-        print(f"  Frames with detections: {len(frame_metadata)}")
-        print(f"  Total players extracted: {total_detections}/{max_players}")
-        print(f"  Metadata saved: {metadata_path}")
-        print(f"{'='*60}\n")
+        logger.info("=" * 60)
+        logger.info(f"Summary for {video_name}:")
+        logger.info(f"  Frames processed: {idx + 1}")
+        logger.info(f"  Frames with detections: {len(frame_metadata)}")
+        logger.info(f"  Total players extracted: {total_detections}/{max_players}")
+        logger.info(f"  Metadata saved: {metadata_path}")
+        logger.info("=" * 60)
 
         return total_detections
 
@@ -383,7 +392,7 @@ class HockeyPoseDatasetExtractor:
             min_players_per_frame: Minimum players needed to process frame
         """
         if not self.videos_dir.exists():
-            print(f"ERROR: Videos directory not found: {self.videos_dir}")
+            logger.error(f"Videos directory not found: {self.videos_dir}")
             return
 
         # Find all video files recursively
@@ -392,13 +401,13 @@ class HockeyPoseDatasetExtractor:
             video_files.extend(self.videos_dir.rglob(ext))
 
         if not video_files:
-            print(f"ERROR: No video files found in {self.videos_dir}")
+            logger.error(f"No video files found in {self.videos_dir}")
             return
 
-        print(f"\n{'='*60}")
-        print(f"Found {len(video_files)} videos in {self.videos_dir}")
-        print(f"Will extract {players_per_video} players from each video")
-        print(f"{'='*60}\n")
+        logger.info("=" * 60)
+        logger.info(f"Found {len(video_files)} videos in {self.videos_dir}")
+        logger.info(f"Will extract {players_per_video} players from each video")
+        logger.info("=" * 60)
 
         total_players = 0
         processed_videos = 0
@@ -414,21 +423,21 @@ class HockeyPoseDatasetExtractor:
                 total_players += players_extracted
                 processed_videos += 1
             except Exception as e:
-                print(f"ERROR processing {video_file}: {e}")
+                logger.error(f"Error processing {video_file}: {e}")
                 continue
 
-        print(f"\n{'='*60}")
-        print(f"EXTRACTION COMPLETE!")
-        print(f"{'='*60}")
-        print(f"  Videos processed: {processed_videos}/{len(video_files)}")
-        print(f"  Total players extracted: {total_players}")
-        print(
+        logger.info("=" * 60)
+        logger.info("EXTRACTION COMPLETE!")
+        logger.info("=" * 60)
+        logger.info(f"  Videos processed: {processed_videos}/{len(video_files)}")
+        logger.info(f"  Total players extracted: {total_players}")
+        logger.info(
             f"  Average per video: {total_players/processed_videos:.1f}"
             if processed_videos > 0
             else "  No videos processed"
         )
-        print(f"  Review directory: {self.review_dir}/players/")
-        print(f"{'='*60}\n")
+        logger.info(f"  Review directory: {self.review_dir}/players/")
+        logger.info("=" * 60)
 
     def export_yolo_dataset(self, train_split: float = 0.8):
         """
@@ -440,18 +449,18 @@ class HockeyPoseDatasetExtractor:
         Args:
             train_split: Fraction of data for training (rest goes to validation)
         """
-        print(f"\n{'='*60}")
-        print("Exporting YOLO Pose Dataset")
-        print(f"{'='*60}")
+        logger.info("=" * 60)
+        logger.info("Exporting YOLO Pose Dataset")
+        logger.info("=" * 60)
 
         # Collect all player images
         all_player_images = list((self.review_dir / "players").glob("*.jpg"))
 
-        print(f"Found {len(all_player_images)} player images")
+        logger.info(f"Found {len(all_player_images)} player images")
 
         if len(all_player_images) == 0:
-            print("ERROR: No images found in review/players/ folder!")
-            print("Please run extraction first")
+            logger.error("No images found in review/players/ folder!")
+            logger.error("Please run extraction first")
             return
 
         # Shuffle and assign single class (0 = hockey_player)
@@ -463,20 +472,20 @@ class HockeyPoseDatasetExtractor:
         train_data = all_images[:split_idx]
         val_data = all_images[split_idx:]
 
-        print(f"Train: {len(train_data)} images")
-        print(f"Val: {len(val_data)} images")
+        logger.info(f"Train: {len(train_data)} images")
+        logger.info(f"Val: {len(val_data)} images")
 
         # Process train and val splits
         skipped = {"train": 0, "val": 0}
         for data, split in [(train_data, "train"), (val_data, "val")]:
-            print(f"\nProcessing {split} split...")
+            logger.info(f"Processing {split} split...")
             saved_count = 0
 
             for idx, (img_path, class_id) in enumerate(data):
                 # Re-run pose detection on the crop to get keypoints
                 img_data = cv2.imread(str(img_path))
                 if img_data is None:
-                    print(f"  WARNING: Could not read {img_path}, skipping")
+                    logger.warning(f"  Could not read {img_path}, skipping")
                     skipped[split] += 1
                     continue
 
@@ -512,7 +521,7 @@ class HockeyPoseDatasetExtractor:
                     # Skip this image - no valid keypoints detected
                     skipped[split] += 1
                     if (idx + 1) % 50 == 0:
-                        print(
+                        logger.info(
                             f"  Processed {idx + 1}/{len(data)} images ({skipped[split]} skipped)"
                         )
                     continue
@@ -544,7 +553,9 @@ class HockeyPoseDatasetExtractor:
 
                 saved_count += 1
                 if saved_count % 100 == 0:
-                    print(f"  Saved {saved_count} images ({skipped[split]} skipped)")
+                    logger.info(
+                        f"  Saved {saved_count} images ({skipped[split]} skipped)"
+                    )
 
         # Create dataset.yaml
         yaml_content = f"""# Hockey Players Pose Dataset
@@ -568,18 +579,20 @@ flip_idx: [0, 2, 1, 4, 3, 6, 5, 8, 7, 10, 9, 12, 11, 14, 13, 16, 15]
         with open(yaml_path, "w") as f:
             f.write(yaml_content)
 
-        print(f"\n{'='*60}")
-        print(f"Dataset exported successfully!")
-        print(f"  Dataset YAML: {yaml_path}")
-        print(
+        logger.info("=" * 60)
+        logger.info("Dataset exported successfully!")
+        logger.info(f"  Dataset YAML: {yaml_path}")
+        logger.info(
             f"  Training images: {len(train_data) - skipped['train']} (skipped {skipped['train']})"
         )
-        print(
+        logger.info(
             f"  Validation images: {len(val_data) - skipped['val']} (skipped {skipped['val']})"
         )
-        print(f"\nTo train YOLO11x-pose:")
-        print(f"  yolo pose train data={yaml_path} model=yolo11x-pose.pt epochs=100")
-        print(f"{'='*60}\n")
+        logger.info("\nTo train YOLO11x-pose:")
+        logger.info(
+            f"  yolo pose train data={yaml_path} model=yolo11x-pose.pt epochs=100"
+        )
+        logger.info("=" * 60)
 
 
 def main():
@@ -695,7 +708,7 @@ def main():
             video_files = list(video_path.glob("*.mp4")) + list(
                 video_path.glob("*.avi")
             )
-            print(f"Found {len(video_files)} videos in {video_path}")
+            logger.info(f"Found {len(video_files)} videos in {video_path}")
 
             total_extracted = 0
             for video_file in video_files:
@@ -705,34 +718,34 @@ def main():
                     max_players=args.max_players_per_video,
                 )
 
-            print(f"\nTotal players extracted from all videos: {total_extracted}")
+            logger.info(f"Total players extracted from all videos: {total_extracted}")
         else:
-            print(f"ERROR: {video_path} is not a valid file or directory")
+            logger.error(f"{video_path} is not a valid file or directory")
             return
 
-        print("\n" + "=" * 60)
-        print("NEXT STEPS:")
-        print("=" * 60)
-        print(f"1. Review images in: {extractor.review_dir}/players/")
-        print("2. Delete poor quality/incorrect images")
-        print("3. Run with --export to create YOLO dataset:")
-        print(
+        logger.info("=" * 60)
+        logger.info("NEXT STEPS:")
+        logger.info("=" * 60)
+        logger.info(f"1. Review images in: {extractor.review_dir}/players/")
+        logger.info("2. Delete poor quality/incorrect images")
+        logger.info("3. Run with --export to create YOLO dataset:")
+        logger.info(
             f"   python -m vt1.finetuning.extract_dataset --export --output-dir {args.output_dir}"
         )
-        print("=" * 60 + "\n")
+        logger.info("=" * 60)
     else:
         parser.print_help()
-        print("\nExamples:")
-        print("  # Process all videos in videos_all/ (100 players each)")
-        print(
+        logger.info("\nExamples:")
+        logger.info("  # Process all videos in videos_all/ (100 players each)")
+        logger.info(
             "  python -m vt1.finetuning.extract_dataset --process-all --max-players-per-video 100"
         )
-        print("\n  # Process specific video")
-        print(
+        logger.info("\n  # Process specific video")
+        logger.info(
             "  python -m vt1.finetuning.extract_dataset --video path/to/video.mp4 --max-players-per-video 50"
         )
-        print("\n  # Export dataset after review")
-        print("  python -m vt1.finetuning.extract_dataset --export")
+        logger.info("\n  # Export dataset after review")
+        logger.info("  python -m vt1.finetuning.extract_dataset --export")
 
 
 if __name__ == "__main__":

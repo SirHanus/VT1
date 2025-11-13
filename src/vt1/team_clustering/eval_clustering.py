@@ -25,9 +25,18 @@ from __future__ import annotations
 
 import argparse
 import json
+import logging
 import time
 from pathlib import Path
 from typing import List, Tuple, Optional, Dict, Any
+
+try:
+    from vt1.logger import get_logger
+
+    logger = get_logger(__name__)
+except ImportError:
+    logging.basicConfig(level=logging.INFO, format="[%(levelname)s] %(message)s")
+    logger = logging.getLogger(__name__)
 
 import cv2
 import numpy as np
@@ -412,7 +421,7 @@ def main() -> int:
     ts = time.strftime("%Y%m%d_%H%M%S")
     out_root = Path(args.out_dir) / f"eval_{ts}"
     ensure_dir(out_root)
-    print(f"[INFO] Output folder: {out_root}")
+    logger.info(f"Output folder: {out_root}")
 
     # helper: robust save with fallback and logging
     def save_annotated(img: np.ndarray, path: Path) -> None:
@@ -422,11 +431,11 @@ def main() -> int:
             alt = path.with_suffix(".png")
             ok2 = cv2.imwrite(str(alt), img)
             if ok2:
-                print(
-                    f"[WARN] Failed to write {path.name}, saved as {alt.name} instead"
+                logger.warning(
+                    f"Failed to write {path.name}, saved as {alt.name} instead"
                 )
             else:
-                print(f"[ERROR] Failed to write annotated image: {path}")
+                logger.error(f"Failed to write annotated image: {path}")
         else:
             # optional: verbose listing
             pass
@@ -440,7 +449,7 @@ def main() -> int:
             device=device,
         )
     except Exception as e:
-        print(f"[ERROR] Failed to init models: {e}")
+        logger.error(f"Failed to init models: {e}")
         return 1
 
     saved_count = 0
@@ -452,17 +461,17 @@ def main() -> int:
     # From images dir
     img_paths = read_images(args.images_dir, args.glob) if args.images_dir else []
     if args.images_dir:
-        print(
-            f"[INFO] Images dir set: {args.images_dir} | patterns: {args.glob} | matched: {len(img_paths)} file(s)"
+        logger.info(
+            f"Images dir set: {args.images_dir} | patterns: {args.glob} | matched: {len(img_paths)} file(s)"
         )
     if args.images_dir and not img_paths:
-        print(
-            f"[WARN] No images matched in {args.images_dir} for patterns: {args.glob}"
+        logger.warning(
+            f"No images matched in {args.images_dir} for patterns: {args.glob}"
         )
     for p in img_paths:
         img = cv2.imread(str(p))
         if img is None:
-            print(f"[WARN] Could not read image: {p}")
+            logger.warning(f"Could not read image: {p}")
             continue
         ann, boxes, labels, margins = tester.predict_labels_on_image(
             img,
@@ -494,15 +503,15 @@ def main() -> int:
     # From video frames
     if args.video:
         video_abs = str(Path(args.video).resolve())
-        print(
-            f"[INFO] Sampling video: {video_abs} | frame-step={int(args.frame_step)} | max-frames={int(args.max_frames)}"
+        logger.info(
+            f"Sampling video: {video_abs} | frame-step={int(args.frame_step)} | max-frames={int(args.max_frames)}"
         )
         frames = sample_video_frames(
             args.video, frame_step=int(args.frame_step), max_frames=int(args.max_frames)
         )
-        print(f"[INFO] Sampled {len(frames)} frame(s) from video")
+        logger.info(f"Sampled {len(frames)} frame(s) from video")
         if not frames:
-            print(f"[WARN] No frames sampled from video: {args.video}")
+            logger.warning(f"No frames sampled from video: {args.video}")
         for i, fr in enumerate(frames):
             ann, boxes, labels, margins = tester.predict_labels_on_image(
                 fr,
@@ -570,12 +579,12 @@ def main() -> int:
     with (out_root / "summary.json").open("w", encoding="utf-8") as f:
         json.dump(summary, f, ensure_ascii=False, indent=2)
 
-    print(f"[INFO] Saved {saved_count} annotated image(s) to: {out_root}")
+    logger.info(f"Saved {saved_count} annotated image(s) to: {out_root}")
     if saved_count == 0:
-        print(
-            "[HINT] No images saved. Check that --images-dir or --video is set, patterns match files, and YOLO detected frames were read."
+        logger.warning(
+            "No images saved. Check that --images-dir or --video is set, patterns match files, and YOLO detected frames were read."
         )
-    print(json.dumps(summary, indent=2))
+    logger.info(json.dumps(summary, indent=2))
     return 0
 
 

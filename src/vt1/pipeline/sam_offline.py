@@ -1,23 +1,31 @@
 # python
 # Minimal POC: YOLO pose + optional SAM2 segmentation on data_hockey.mp4 (optimized for speed/memory)
 import argparse
-from pathlib import Path
+import gc
+import json
+import logging
 import sys
 import time
-import gc
-
+from datetime import datetime, timezone
+from pathlib import Path
 from typing import List, Tuple, Optional
 
 import cv2
 import numpy as np
 import torch
-from ultralytics import YOLO
 from tqdm import tqdm
-import json
-from datetime import datetime, timezone
+from ultralytics import YOLO
 
-from vt1.pipeline.sam_general import SAM2VideoWrapper  # same folder in package
 from vt1.config import settings
+from vt1.pipeline.sam_general import SAM2VideoWrapper  # same folder in package
+
+try:
+    from vt1.logger import get_logger
+
+    logger = get_logger(__name__)
+except ImportError:
+    logging.basicConfig(level=logging.INFO, format="[%(levelname)s] %(message)s")
+    logger = logging.getLogger(__name__)
 
 # --- Team clustering inference additions ---
 try:
@@ -318,13 +326,14 @@ def _build_out_path(args) -> Path:
 
 def init_sam2(model_id: str, device: str, prefer_half: bool) -> Optional[object]:
     if SAM2VideoWrapper is None:
-        print("[WARN] SAM2 wrapper not available. Proceeding without SAM.")
+        logger.warning("SAM2 wrapper not available. Proceeding without SAM.")
         return None
     try:
         dtype = torch.float16 if (device == "cuda" and prefer_half) else torch.float32
         return SAM2VideoWrapper(model_id=model_id, device=device, dtype=dtype)
     except Exception as e:
-        print(f"[WARN] SAM2 init failed: {e}\nProceeding without SAM.")
+        logger.warning(f"SAM2 init failed: {e}")
+        logger.warning("Proceeding without SAM.")
         return None
 
 
@@ -348,13 +357,13 @@ def main():
                 models_dir=Path(args.team_models), siglip_id=args.siglip, device=device
             )
         except Exception as e:
-            print(f"[WARN] Team clustering inference disabled: {e}")
+            logger.warning(f"Team clustering inference disabled: {e}")
             team_infer = None
 
     # Open source video
     cap = cv2.VideoCapture(args.source)
     if not cap.isOpened():
-        print(f"[ERROR] Failed to open video: {args.source}")
+        logger.error(f"Failed to open video: {args.source}")
         return 1
 
     # Reduce capture buffering if supported (helps latency/memory on some backends)
@@ -377,7 +386,7 @@ def main():
                 # Half precision gives big speedups and memory savings on GPU
                 pose_model.model.half()
     except Exception as e:
-        print(f"[ERROR] Could not load pose model '{args.pose_model}': {e}")
+        logger.error(f"Could not load pose model '{args.pose_model}': {e}")
         return 1
 
     # Init SAM2 (optional)
@@ -395,13 +404,13 @@ def main():
     # Probe first frame to get size
     ok, first = cap.read()
     if not ok:
-        print("[ERROR] Could not read first frame")
+        logger.error("Could not read first frame")
         return 1
     H, W = first.shape[:2]
     fourcc = cv2.VideoWriter_fourcc(*"mp4v")
     writer = cv2.VideoWriter(str(out_path), fourcc, src_fps, (W, H))
     if not writer.isOpened():
-        print(f"[ERROR] Could not open writer at: {out_path}")
+        logger.error(f"Could not open writer at: {out_path}")
         return 1
 
     # Reset capture to frame 0 for full processing
@@ -500,7 +509,7 @@ def main():
                     frame, boxes, central_ratio=float(args.central_ratio)
                 )
             except Exception as e:
-                print(f"[WARN] Team inference error at frame {frame_idx}: {e}")
+                logger.warning(f"Team inference error at frame {frame_idx}: {e}")
                 team_labels = None
 
         # Prepare visualization
@@ -538,7 +547,7 @@ def main():
                 cv2.addWeighted(overlay, alpha, vis, 1 - alpha, 0, vis)
                 sam_frames += 1
             except Exception as e:
-                print(f"[WARN] SAM2 frame error at {frame_idx}: {e}")
+                logger.warning(f"SAM2 frame error at {frame_idx}: {e}")
 
         # Draw poses with team color if available
         if kpts is not None and len(kpts) > 0:
@@ -648,9 +657,9 @@ def main():
             with mpath.open("w", encoding="utf-8") as f:
                 json.dump(metrics, f, ensure_ascii=False, indent=2)
     except Exception as e:
-        print(f"[WARN] Failed to write metrics JSON: {e}")
+        logger.warning(f"Failed to write metrics JSON: {e}")
 
-    print(
+    logger.info(
         f"Saved: {out_path} | frames={frame_idx} | time={dt:.1f}s | fps~{frame_idx / max(1e-6, dt):.1f}"
     )
     return 0

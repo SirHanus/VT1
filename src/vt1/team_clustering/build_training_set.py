@@ -11,6 +11,7 @@ from __future__ import annotations
 import argparse
 import csv
 import json
+import logging
 from dataclasses import dataclass
 from pathlib import Path
 from typing import List, Tuple, Dict, Any
@@ -20,11 +21,18 @@ import numpy as np
 import torch
 from PIL import Image
 from tqdm import tqdm
-
 # Transformers (SigLIP)
 from transformers import AutoImageProcessor
 
 from vt1.config import settings
+
+try:
+    from vt1.logger import get_logger
+
+    logger = get_logger(__name__)
+except ImportError:
+    logging.basicConfig(level=logging.INFO, format="[%(levelname)s] %(message)s")
+    logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -507,8 +515,8 @@ def main() -> int:
         videos = sorted(Path(args.videos_dir).glob(args.glob))
     videos = [v for v in videos if v.suffix.lower() in {".mp4", ".avi", ".mov", ".mkv"}]
     if not videos:
-        print(
-            f"[ERROR] No videos found. Checked: --videos {args.videos} or {args.videos_dir} / {args.glob}"
+        logger.error(
+            f"No videos found. Checked: --videos {args.videos} or {args.videos_dir} / {args.glob}"
         )
         return 1
 
@@ -517,7 +525,7 @@ def main() -> int:
         detector = YOLODetector(args.yolo_model, device=device)
         det_name = "yolo"
     except Exception as e:
-        print(f"[ERROR] YOLO detector init failed: {e}")
+        logger.error(f"YOLO detector init failed: {e}")
         return 1
 
     # Init embedder
@@ -539,14 +547,14 @@ def main() -> int:
         try:
             info = build_for_video(v, detector, embedder, args, out_root)
         except Exception as e:
-            print(f"[WARN] Failed on {v}: {e}")
+            logger.warning(f"Failed on {v}: {e}")
             continue
         manifest["videos"].append(info)
         # Save/append manifest incrementally
         with manifest_path.open("w", encoding="utf-8") as f:
             json.dump(manifest, f, ensure_ascii=False, indent=2)
 
-    print(f"Done. Output in: {out_root}")
+    logger.info(f"Done. Output in: {out_root}")
     return 0
 
 

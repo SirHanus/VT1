@@ -1,5 +1,6 @@
 # yolo_sam2_demo.py
 import argparse
+import logging
 import os
 import time
 from collections import deque
@@ -9,6 +10,14 @@ import cv2
 import numpy as np
 import torch
 from ultralytics import YOLO
+
+try:
+    from vt1.logger import get_logger
+
+    logger = get_logger(__name__)
+except ImportError:
+    logging.basicConfig(level=logging.INFO, format="[%(levelname)s] %(message)s")
+    logger = logging.getLogger(__name__)
 
 # --- SAM2 via Hugging Face (video) ---
 # Requires: pip install transformers accelerate --upgrade
@@ -353,7 +362,7 @@ def main():
     cap_src = parse_source(args.source)
     cap = cv2.VideoCapture(cap_src)
     if not cap.isOpened():
-        print(f"[ERROR] Failed to open source: {args.source}")
+        logger.error(f"Failed to open source: {args.source}")
         return 1
 
     src_fps = cap.get(cv2.CAP_PROP_FPS) or 30.0
@@ -364,7 +373,7 @@ def main():
     try:
         yolo = YOLO(args.yolo_model)
     except Exception as e:
-        print(f"[ERROR] Could not load YOLO model '{args.yolo_model}': {e}")
+        logger.error(f"Could not load YOLO model '{args.yolo_model}': {e}")
         return 1
 
     # Load SAM2
@@ -373,8 +382,8 @@ def main():
             model_id=args.sam2, device=args.device, dtype=torch.bfloat16
         )
     except Exception as e:
-        print(f"[ERROR] SAM2 init failed: {e}")
-        print("Hint: pip install transformers accelerate --upgrade")
+        logger.error(f"SAM2 init failed: {e}")
+        logger.error("Hint: pip install transformers accelerate --upgrade")
         return 1
 
     # Optional class filter

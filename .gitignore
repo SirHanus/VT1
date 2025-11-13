@@ -225,3 +225,4 @@ config_local.toml
 /models
 /hockey_pose_dataset
 /runs
+/logs

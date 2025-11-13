@@ -9,6 +9,10 @@ team_models_dir = "models/team_clustering"       # Folder where UMAP/KMeans .pkl
 pipeline_output_dir = "outputs"                  # Top-level folder for pipeline run outputs (videos, JSON, images)
 # Separate output subtree for team clustering utilities (build/eval/audit)
 team_output_dir = "outputs/team_clustering"      # Working folder for team clustering tools (training set, clustering artifacts, eval results)
+# YOLO training runs folder (same level as models/ and outputs/)
+runs_dir = "runs"                                # Folder where YOLO training runs are saved (weights, metrics, plots)
+# Application logs folder
+logs_dir = "logs"                                # Folder where application logs are saved
 log_level = "INFO"                                # Global log level (DEBUG, INFO, WARNING, ERROR); higher verbosity helps debugging
 
 # --- Shared defaults used by CLI and GUI ---

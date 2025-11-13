@@ -23,10 +23,19 @@ from __future__ import annotations
 import argparse
 import csv
 import json
+import logging
 from pathlib import Path
 from typing import List, Tuple, Dict, Any
 
 import numpy as np
+
+try:
+    from vt1.logger import get_logger
+
+    logger = get_logger(__name__)
+except ImportError:
+    logging.basicConfig(level=logging.INFO, format="[%(levelname)s] %(message)s")
+    logger = logging.getLogger(__name__)
 
 # Optional plotting (lazy)
 _HAS_MPL = False
@@ -288,8 +297,8 @@ def main() -> int:
             reducer = joblib.load(args.reuse_umap)
             Z = reducer.transform(E)
         except Exception as e:
-            print(
-                f"[WARN] Failed to reuse UMAP from {args.reuse_umap}: {e}. Fitting a new one instead."
+            logger.warning(
+                f"Failed to reuse UMAP from {args.reuse_umap}: {e}. Fitting a new one instead."
             )
             Z, reducer = run_umap(
                 E,
@@ -326,8 +335,8 @@ def main() -> int:
             out_root_res = out_root.resolve()
             ensure_dir(models_dir)
             if models_dir == out_root_res:
-                print(
-                    f"[WARN] models-dir ({models_dir}) == out-dir ({out_root_res}); recommended to separate models from clustering outputs."
+                logger.warning(
+                    f"models-dir ({models_dir}) == out-dir ({out_root_res}); recommended to separate models from clustering outputs."
                 )
             # Save UMAP reducer
             if reducer is not None:
@@ -336,13 +345,13 @@ def main() -> int:
             # Save KMeans model
             saved_kmeans = models_dir / "kmeans.pkl"
             joblib.dump(km_model, saved_kmeans)
-            print(f"[INFO] Saved UMAP -> {saved_umap if saved_umap else 'N/A'}")
-            print(f"[INFO] Saved KMeans -> {saved_kmeans if saved_kmeans else 'N/A'}")
+            logger.info(f"Saved UMAP -> {saved_umap if saved_umap else 'N/A'}")
+            logger.info(f"Saved KMeans -> {saved_kmeans if saved_kmeans else 'N/A'}")
         except Exception as e:
-            print(f"[WARN] Failed to save models: {e}")
+            logger.warning(f"Failed to save models: {e}")
     else:
-        print(
-            "[INFO] Models not saved (no --save-models flag). Re-run with --save-models to create umap.pkl and kmeans.pkl."
+        logger.info(
+            "Models not saved (no --save-models flag). Re-run with --save-models to create umap.pkl and kmeans.pkl."
         )
 
     # Write labeled index
@@ -406,13 +415,13 @@ def main() -> int:
         except Exception:
             pass
 
-    print(f"Clustering complete. Output in: {out_root}")
+    logger.info(f"Clustering complete. Output in: {out_root}")
     if args.save_models:
-        print(f"Models available at: {Path(args.models_dir).resolve()}")
+        logger.info(f"Models available at: {Path(args.models_dir).resolve()}")
         if saved_umap:
-            print(f"  UMAP:   {saved_umap}")
+            logger.info(f"  UMAP:   {saved_umap}")
         if saved_kmeans:
-            print(f"  KMeans: {saved_kmeans}")
+            logger.info(f"  KMeans: {saved_kmeans}")
     return 0
 
 

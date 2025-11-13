@@ -17,6 +17,7 @@ from __future__ import annotations
 import argparse
 import csv
 import json
+import logging
 import time
 from pathlib import Path
 from typing import Dict, Any, List
@@ -25,6 +26,14 @@ import cv2
 import numpy as np
 
 from vt1.config import settings
+
+try:
+    from vt1.logger import get_logger
+
+    logger = get_logger(__name__)
+except ImportError:
+    logging.basicConfig(level=logging.INFO, format="[%(levelname)s] %(message)s")
+    logger = logging.getLogger(__name__)
 
 
 def parse_args() -> argparse.Namespace:
@@ -97,12 +106,12 @@ def main() -> int:
 
     in_root = Path(args.in_root)
     if not in_root.exists():
-        print(f"[ERROR] --in-root does not exist: {in_root}")
+        logger.error(f"--in-root does not exist: {in_root}")
         return 1
 
     videos = [p for p in in_root.iterdir() if p.is_dir()]
     if not videos:
-        print(f"[ERROR] No per-video folders found under {in_root}")
+        logger.error(f"No per-video folders found under {in_root}")
         return 1
 
     global_stats: Dict[str, Any] = {
@@ -174,11 +183,11 @@ def main() -> int:
     with (out_root / "summary.json").open("w", encoding="utf-8") as f:
         json.dump(global_stats, f, ensure_ascii=False, indent=2)
 
-    print(f"Audit done. Output: {out_root}")
-    print(json.dumps(global_stats, indent=2))
-    if global_stats["with_crops_saved"] == 0:
-        print(
-            "[HINT] No crops were saved. Re-run build_training_set.py with --save-crops to visually inspect training data."
+    logger.info(f"Audit done. Output: {out_root}")
+    logger.info(json.dumps(global_stats, indent=2))
+    if args.show_hint and global_stats.get("with_crops_saved", 0) == 0:
+        logger.warning(
+            "No crops saved. Re-run build_training_set.py with --save-crops to enable visual audit."
         )
     return 0
 

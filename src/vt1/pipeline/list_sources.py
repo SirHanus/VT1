@@ -1,11 +1,20 @@
 # python
 import argparse
+import logging
 import os
 import sys
 from pathlib import Path
 from threading import Thread
 
 import cv2
+
+try:
+    from vt1.logger import get_logger
+
+    logger = get_logger(__name__)
+except ImportError:
+    logging.basicConfig(level=logging.INFO, format="[%(levelname)s] %(message)s")
+    logger = logging.getLogger(__name__)
 
 VIDEO_EXTS = {".mp4", ".mov", ".avi", ".mkv", ".wmv", ".m4v", ".mpg", ".mpeg", ".webm"}
 
@@ -156,41 +165,41 @@ def main():
     )
     args = ap.parse_args()
 
-    print("Probing cameras...")
+    logger.info("Probing cameras...")
     cams = probe_cameras(max_index=args.max_index, timeout=args.timeout)
     if cams:
         for c in cams:
-            print(
+            logger.info(
                 f"- Camera index {c['index']} [{c['backend']}], {c['width']}x{c['height']}, fps~{c['fps']:.1f}  -> use --source {c['index']}"
             )
     else:
-        print("- No cameras found")
+        logger.info("- No cameras found")
 
     if os.name == "nt":
         names = get_windows_camera_names()
         if names:
-            print("Detected Windows camera devices:")
+            logger.info("Detected Windows camera devices:")
             for n in names:
-                print(f"  - {n}")
+                logger.info(f"  - {n}")
 
     root = Path(args.scan_dir).resolve()
-    print(
+    logger.info(
         f"Scanning video files under {root} ({'non-recursive' if args.no_recursive else 'recursive'})..."
     )
     vids = scan_video_files(root, recursive=not args.no_recursive, timeout=args.timeout)
     if vids:
         for v in vids:
             dur = f", {v['duration_sec']:.1f}s" if v["duration_sec"] > 0 else ""
-            print(
+            logger.info(
                 f"- File {v['path']}  ({v['width']}x{v['height']}, fps~{v['fps']:.1f}{dur})  -> use --source {v['path']}"
             )
     else:
-        print("- No readable video files found")
+        logger.info("- No readable video files found")
 
-    print("\nExamples you can pass to --source:")
-    print("- Integer webcam index, e.g. 0")
-    print("- Path to a video file, e.g. C:\\path\\to\\video.mp4")
-    print(
+    logger.info("\nExamples you can pass to --source:")
+    logger.info("- Integer webcam index, e.g. 0")
+    logger.info("- Path to a video file, e.g. C:\\path\\to\\video.mp4")
+    logger.info(
         "- Network streams supported by OpenCV/FFmpeg, e.g. rtsp://user:pass@host:554/stream (if available)"
     )
 

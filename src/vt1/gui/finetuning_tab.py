@@ -32,14 +32,25 @@ class FinetuningTab(QtWidgets.QWidget):
 
         # Build UI
         vlay = QtWidgets.QVBoxLayout(self)
+
+        self.disclaimer_lbl = QtWidgets.QLabel(
+            "<b>Disclaimer:</b> Fine-tuning is under development and may have side effects."
+        )
+        self.disclaimer_lbl.setWordWrap(True)
+        self.disclaimer_lbl.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
+        self.disclaimer_lbl.setStyleSheet(
+            "QLabel { color: #b71c1c; background-color: #ffebee; "
+            "border: 1px solid #f44336; padding: 8px; border-radius: 4px; }"
+        )
+        vlay.addWidget(self.disclaimer_lbl)
+
         self.tabs = QtWidgets.QTabWidget()
         vlay.addWidget(self.tabs)
 
         # Add tabs
-        self.tabs.addTab(self._make_extract_tab(), "1. Extract Dataset")
-        self.tabs.addTab(self._make_export_tab(), "2. Export YOLO")
-        self.tabs.addTab(self._make_train_tab(), "3. Train Model")
-        self.tabs.addTab(self._make_manage_tab(), "4. Manage Models")
+        self.tabs.addTab(self._make_extract_tab(), "1. Extract & Format Dataset")
+        self.tabs.addTab(self._make_train_tab(), "2. Train Model")
+        self.tabs.addTab(self._make_manage_tab(), "3. Manage Models")
 
     def _repo_root(self) -> Path:
         return Path(__file__).resolve().parents[2]
@@ -152,41 +163,23 @@ class FinetuningTab(QtWidgets.QWidget):
         btn_row.addWidget(self.extract_open_btn)
         vlay.addLayout(btn_row)
 
-        # Load defaults
-        self._load_extract_defaults()
-
-        return widget
-
-    # ========== TAB 2: EXPORT YOLO ==========
-    def _make_export_tab(self) -> QtWidgets.QWidget:
-        """Tab for exporting dataset to YOLO format."""
-        widget = QtWidgets.QWidget()
-        vlay = QtWidgets.QVBoxLayout(widget)
+        # ========== Format data for YOLO section ==========
+        export_group = QtWidgets.QGroupBox("Format data for YOLO")
+        export_vlay = QtWidgets.QVBoxLayout()
 
         # Info label
         info = QtWidgets.QLabel(
-            "Export the extracted dataset to YOLO pose format after reviewing and cleaning images.\n"
-            "Review images in: <output_dir>/review/players/\n"
-            "Delete poor quality images before exporting."
+            "After extracting and reviewing images (in review/players/ folder), "
+            "export to YOLO pose format for training. Delete poor quality images before exporting."
         )
         info.setWordWrap(True)
         info.setStyleSheet(
-            "QLabel { padding: 10px; background-color: #e3f2fd; border-radius: 5px; }"
+            "QLabel { padding: 8px; background-color: #e3f2fd; border-radius: 4px; }"
         )
-        vlay.addWidget(info)
+        export_vlay.addWidget(info)
 
         # Configuration
-        config_group = QtWidgets.QGroupBox("Export Configuration")
-        form = QtWidgets.QFormLayout()
-
-        # Dataset directory (same as extraction output)
-        self.export_dataset_ed = QtWidgets.QLineEdit()
-        self.export_dataset_btn = QtWidgets.QPushButton("Browse...")
-        self.export_dataset_btn.clicked.connect(self._browse_export_dataset)
-        form.addRow(
-            "Dataset Directory:",
-            self._hrow(self.export_dataset_ed, self.export_dataset_btn),
-        )
+        export_form = QtWidgets.QFormLayout()
 
         # Train/val split
         self.export_split_dsb = QtWidgets.QDoubleSpinBox()
@@ -196,34 +189,28 @@ class FinetuningTab(QtWidgets.QWidget):
         self.export_split_dsb.setToolTip(
             "Fraction of data for training (rest goes to validation)"
         )
-        form.addRow("Train Split:", self.export_split_dsb)
+        export_form.addRow("Train Split:", self.export_split_dsb)
 
-        config_group.setLayout(form)
-        vlay.addWidget(config_group)
+        export_vlay.addLayout(export_form)
 
-        # Status
-        status_group = QtWidgets.QGroupBox("Export Status")
-        status_lay = QtWidgets.QVBoxLayout()
-
+        # Export status
         self.export_progress = QtWidgets.QProgressBar()
         self.export_progress.setRange(0, 100)
-        status_lay.addWidget(self.export_progress)
+        export_vlay.addWidget(self.export_progress)
 
         self.export_status_lbl = QtWidgets.QLabel("Ready")
-        status_lay.addWidget(self.export_status_lbl)
+        export_vlay.addWidget(self.export_status_lbl)
 
         self.export_log = QtWidgets.QPlainTextEdit()
         self.export_log.setReadOnly(True)
-        self.export_log.setMaximumBlockCount(1000)
+        self.export_log.setMaximumBlockCount(500)
         self.export_log.setFont(QtGui.QFont("Courier New", 9))
-        status_lay.addWidget(self.export_log)
+        self.export_log.setMaximumHeight(150)
+        export_vlay.addWidget(self.export_log)
 
-        status_group.setLayout(status_lay)
-        vlay.addWidget(status_group)
-
-        # Buttons
-        btn_row = QtWidgets.QHBoxLayout()
-        self.export_run_btn = QtWidgets.QPushButton("Export to YOLO Format")
+        # Export buttons
+        export_btn_row = QtWidgets.QHBoxLayout()
+        self.export_run_btn = QtWidgets.QPushButton("Format data for YOLO")
         self.export_run_btn.clicked.connect(self._run_export)
         self.export_stop_btn = QtWidgets.QPushButton("Stop")
         self.export_stop_btn.setEnabled(False)
@@ -231,18 +218,21 @@ class FinetuningTab(QtWidgets.QWidget):
         self.export_open_btn = QtWidgets.QPushButton("Open Dataset Folder")
         self.export_open_btn.clicked.connect(self._open_dataset_folder)
 
-        btn_row.addWidget(self.export_run_btn)
-        btn_row.addWidget(self.export_stop_btn)
-        btn_row.addStretch()
-        btn_row.addWidget(self.export_open_btn)
-        vlay.addLayout(btn_row)
+        export_btn_row.addWidget(self.export_run_btn)
+        export_btn_row.addWidget(self.export_stop_btn)
+        export_btn_row.addStretch()
+        export_btn_row.addWidget(self.export_open_btn)
+        export_vlay.addLayout(export_btn_row)
+
+        export_group.setLayout(export_vlay)
+        vlay.addWidget(export_group)
 
         # Load defaults
-        self._load_export_defaults()
+        self._load_extract_defaults()
 
         return widget
 
-    # ========== TAB 3: TRAIN MODEL ==========
+    # ========== TAB 2: TRAIN MODEL ==========
     def _make_train_tab(self) -> QtWidgets.QWidget:
         """Tab for training YOLO pose model."""
         widget = QtWidgets.QWidget()
@@ -251,7 +241,7 @@ class FinetuningTab(QtWidgets.QWidget):
         # Info
         info = QtWidgets.QLabel(
             "Train a YOLO11 pose model on your hockey player dataset.\n"
-            "Make sure you've exported the dataset first (Tab 2)."
+            "Make sure you've formatted the dataset for YOLO first (Tab 1)."
         )
         info.setWordWrap(True)
         info.setStyleSheet(
@@ -482,11 +472,7 @@ class FinetuningTab(QtWidgets.QWidget):
         self.extract_interval_sb.setValue(cfg.finetuning_frame_interval)
         self.extract_conf_dsb.setValue(cfg.finetuning_detection_conf)
         self.extract_keypoints_sb.setValue(cfg.finetuning_min_keypoints)
-
-    def _load_export_defaults(self):
-        """Load default values for export tab."""
-        cfg = settings()
-        self.export_dataset_ed.setText(str(cfg.finetuning_output_dir))
+        # Also load export defaults
         self.export_split_dsb.setValue(cfg.finetuning_train_split)
 
     def _load_train_defaults(self):
@@ -531,14 +517,6 @@ class FinetuningTab(QtWidgets.QWidget):
         )
         if path:
             self.extract_model_ed.setText(path)
-
-    def _browse_export_dataset(self):
-        """Browse for dataset directory to export."""
-        path = QtWidgets.QFileDialog.getExistingDirectory(
-            self, "Select Dataset Directory", self.export_dataset_ed.text()
-        )
-        if path:
-            self.export_dataset_ed.setText(path)
 
     def _browse_dataset_yaml(self):
         """Browse for dataset.yaml file."""
@@ -632,14 +610,14 @@ class FinetuningTab(QtWidgets.QWidget):
                 "Complete",
                 "Dataset extraction complete!\n\n"
                 "Review images in the review/players folder, delete poor quality images, "
-                "then proceed to Tab 2 to export the dataset.",
+                "then use 'Format data for YOLO' below to prepare the dataset for training.",
             )
         else:
             self.extract_status_lbl.setText(f"Extraction failed (code {code})")
 
     # ========== EXPORT METHODS ==========
     def _run_export(self):
-        """Run dataset export."""
+        """Run dataset export to YOLO format."""
         if self.export_proc is not None:
             QtWidgets.QMessageBox.warning(
                 self, "Already Running", "Stop the current export first."
@@ -651,7 +629,7 @@ class FinetuningTab(QtWidgets.QWidget):
             "vt1.finetuning.extract_dataset",
             "--export",
             "--output-dir",
-            self.export_dataset_ed.text(),
+            self.extract_output_ed.text(),  # Use the same output dir as extraction
             "--train-split",
             str(self.export_split_dsb.value()),
         ]
@@ -693,7 +671,7 @@ class FinetuningTab(QtWidgets.QWidget):
                 self,
                 "Complete",
                 "Dataset exported successfully!\n\n"
-                "Proceed to Tab 3 to train a model on this dataset.",
+                "Proceed to Tab 2 to train a model on this dataset.",
             )
         else:
             self.export_status_lbl.setText(f"Export failed (code {code})")
@@ -714,7 +692,7 @@ class FinetuningTab(QtWidgets.QWidget):
                 self,
                 "Dataset Not Found",
                 f"Dataset YAML not found: {data_yaml}\n\n"
-                "Please export the dataset first (Tab 2).",
+                "Please format the dataset for YOLO first (Tab 1).",
             )
             return
 
@@ -941,7 +919,7 @@ class FinetuningTab(QtWidgets.QWidget):
 
     def _open_dataset_folder(self):
         """Open dataset folder in file explorer."""
-        dataset_dir = Path(self.export_dataset_ed.text())
+        dataset_dir = Path(self.extract_output_ed.text())
         self._open_folder(dataset_dir)
 
     def _open_runs_folder(self):

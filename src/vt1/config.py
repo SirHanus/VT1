@@ -32,6 +32,8 @@ class Config:
     team_models_dir: Path
     pipeline_output_dir: Path
     team_output_dir: Path
+    runs_dir: Path
+    logs_dir: Path
     log_level: str
     # Shared defaults
     yolo_conf: float
@@ -78,6 +80,8 @@ class Config:
             self.team_models_dir,
             self.pipeline_output_dir,
             self.team_output_dir,
+            self.runs_dir,
+            self.logs_dir,
             self.finetuning_output_dir,
             self.finetuning_models_dir,
         ]:
@@ -122,6 +126,8 @@ def _coerce_paths(repo_root: Path, raw: Dict[str, Any]) -> Dict[str, Any]:
     out["team_models_dir"] = rp(raw.get("team_models_dir", "models/team_clustering"))
     out["pipeline_output_dir"] = rp(raw.get("pipeline_output_dir", "outputs"))
     out["team_output_dir"] = rp(raw.get("team_output_dir", "outputs/team_clustering"))
+    out["runs_dir"] = rp(raw.get("runs_dir", "runs"))
+    out["logs_dir"] = rp(raw.get("logs_dir", "logs"))
     out["log_level"] = str(raw.get("log_level", "INFO"))
     # Shared defaults coercion
     out["yolo_conf"] = float(raw.get("yolo_conf", 0.30))
@@ -174,7 +180,6 @@ def _coerce_paths(repo_root: Path, raw: Dict[str, Any]) -> Dict[str, Any]:
 
 def _load() -> Config:
     repo = _repo_root()
-    print(repo)
     defaults = _read_toml(repo / "config_defaults.toml")
     local = _read_toml(repo / "config_local.toml")
     merged: Dict[str, Any] = {**defaults, **local}
