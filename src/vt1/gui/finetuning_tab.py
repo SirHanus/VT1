@@ -167,15 +167,22 @@ class FinetuningTab(QtWidgets.QWidget):
         export_group = QtWidgets.QGroupBox("Format data for YOLO")
         export_vlay = QtWidgets.QVBoxLayout()
 
-        # Info label
         info = QtWidgets.QLabel(
             "After extracting and reviewing images (in review/players/ folder), "
-            "export to YOLO pose format for training. Delete poor quality images before exporting."
+            "export to YOLO pose format for training. Delete poor quality images before formatting."
         )
 
         info.setWordWrap(True)
         info.setStyleSheet(
-            "QLabel { padding: 8px; background-color: #e3f2fd; border-radius: 4px; font-color: #0d47a1; }"
+            """
+            QLabel {
+                padding: 8px;
+                background-color: #e3f2fd;   /* light info background */
+                border-radius: 4px;
+                color: #0b192f;              /* dark text for contrast */
+                font-size: 11pt;             /* slightly larger text */
+            }
+        """
         )
         export_vlay.addWidget(info)
 
@@ -246,7 +253,15 @@ class FinetuningTab(QtWidgets.QWidget):
         )
         info.setWordWrap(True)
         info.setStyleSheet(
-            "QLabel { padding: 10px; background-color: #e8f5e9; border-radius: 5px; }"
+            """
+            QLabel {
+                padding: 8px;
+                background-color: #e3f2fd;   /* light info background */
+                border-radius: 4px;
+                color: #0b192f;              /* dark text for contrast */
+                font-size: 11pt;             /* slightly larger text */
+            }
+        """
         )
         vlay.addWidget(info)
 
@@ -894,7 +909,7 @@ class FinetuningTab(QtWidgets.QWidget):
         status_lbl.setText("Stopped")
 
     def _on_process_output(self, proc, log, status_lbl, progress):
-        """Handle process output."""
+        """Handle process output with enhanced progress tracking."""
         if proc is None:
             return
 
@@ -905,23 +920,149 @@ class FinetuningTab(QtWidgets.QWidget):
         log.appendPlainText(text.rstrip())
         log.verticalScrollBar().setValue(log.verticalScrollBar().maximum())
 
-        # Try to extract progress info
-        # Look for patterns like "Epoch X/Y" or "X/Y images"
+        # === EXTRACTION PROGRESS ===
+        # Look for "Processing: <video_name>"
+        if "Processing:" in text and "=" in text:
+            video_match = re.search(r"Processing:\s+(.+)", text)
+            if video_match:
+                video_name = video_match.group(1).strip()
+                status_lbl.setText(f"Extracting from: {video_name}")
+
+        # Look for "Extracted N frames"
+        extracted_match = re.search(r"Extracted\s+(\d+)\s+frames", text)
+        if extracted_match:
+            frames = extracted_match.group(1)
+            status_lbl.setText(f"Extracted {frames} frames, detecting players...")
+
+        # Look for "Frame X/Y" during detection
+        frame_match = re.search(r"Frame\s+(\d+)/(\d+)", text)
+        if frame_match:
+            current = int(frame_match.group(1))
+            total = int(frame_match.group(2))
+            progress.setRange(0, total)
+            progress.setValue(current)
+            status_lbl.setText(f"Detecting players: frame {current}/{total}")
+
+        # Look for "Total players extracted: X/Y"
+        players_match = re.search(r"Total players extracted:\s+(\d+)/(\d+)", text)
+        if players_match:
+            extracted = int(players_match.group(1))
+            max_players = int(players_match.group(2))
+            pct = (extracted / max_players * 100) if max_players > 0 else 0
+            progress.setRange(0, max_players)
+            progress.setValue(extracted)
+            status_lbl.setText(
+                f"Extracted {extracted}/{max_players} players ({pct:.0f}%)"
+            )
+
+        # Look for "Videos processed: X/Y"
+        videos_match = re.search(r"Videos processed:\s+(\d+)/(\d+)", text)
+        if videos_match:
+            current = int(videos_match.group(1))
+            total = int(videos_match.group(2))
+            progress.setRange(0, total)
+            progress.setValue(current)
+            status_lbl.setText(f"Processed {current}/{total} videos")
+
+        # Look for "EXTRACTION COMPLETE"
+        if "EXTRACTION COMPLETE" in text:
+            status_lbl.setText("✓ Extraction complete!")
+            progress.setValue(progress.maximum())
+
+        # === EXPORT PROGRESS ===
+        # Look for "Exporting YOLO Pose Dataset"
+        if "Exporting YOLO Pose Dataset" in text:
+            status_lbl.setText("Starting YOLO dataset export...")
+            progress.setRange(0, 0)  # Indeterminate
+
+        # Look for "Found N player images"
+        found_match = re.search(r"Found\s+(\d+)\s+player images", text)
+        if found_match:
+            count = found_match.group(1)
+            status_lbl.setText(f"Found {count} images to export")
+
+        # Look for "Train: N images"
+        train_match = re.search(r"Train:\s+(\d+)\s+images", text)
+        if train_match:
+            count = train_match.group(1)
+            status_lbl.setText(f"Preparing {count} training images...")
+
+        # Look for "Processing train/val split"
+        if "Processing train split" in text:
+            status_lbl.setText("Exporting training split...")
+            progress.setRange(0, 0)
+        elif "Processing val split" in text:
+            status_lbl.setText("Exporting validation split...")
+
+        # Look for "Processed X/Y images (N skipped)"
+        export_prog_match = re.search(
+            r"Processed\s+(\d+)/(\d+)\s+images\s+\((\d+)\s+skipped\)", text
+        )
+        if export_prog_match:
+            current = int(export_prog_match.group(1))
+            total = int(export_prog_match.group(2))
+            skipped = int(export_prog_match.group(3))
+            progress.setRange(0, total)
+            progress.setValue(current)
+            status_lbl.setText(
+                f"Exporting: {current}/{total} images ({skipped} skipped)"
+            )
+
+        # Look for "Dataset exported successfully"
+        if "Dataset exported successfully" in text or "YOLO dataset created" in text:
+            status_lbl.setText("✓ Dataset export complete!")
+            progress.setValue(progress.maximum())
+
+        # === TRAINING PROGRESS ===
+        # Look for "Epoch X/Y" (YOLO training)
         epoch_match = re.search(r"Epoch\s+(\d+)/(\d+)", text)
         if epoch_match:
             current = int(epoch_match.group(1))
             total = int(epoch_match.group(2))
             progress.setRange(0, total)
             progress.setValue(current)
-            status_lbl.setText(f"Training epoch {current}/{total}")
+            status_lbl.setText(f"Training: epoch {current}/{total}")
 
-        # Look for "Processed X/Y"
-        proc_match = re.search(r"Processed\s+(\d+)/(\d+)", text)
-        if proc_match:
-            current = int(proc_match.group(1))
-            total = int(proc_match.group(2))
-            progress.setRange(0, total)
-            progress.setValue(current)
+        # Look for epoch metrics (loss values)
+        loss_match = re.search(r"box_loss:\s+([\d.]+).*?pose_loss:\s+([\d.]+)", text)
+        if loss_match and epoch_match:
+            box_loss = float(loss_match.group(1))
+            pose_loss = float(loss_match.group(2))
+            current = int(epoch_match.group(1))
+            total = int(epoch_match.group(2))
+            status_lbl.setText(
+                f"Epoch {current}/{total} - box: {box_loss:.3f}, pose: {pose_loss:.3f}"
+            )
+
+        # Look for validation metrics
+        val_match = re.search(
+            r"val/box_loss:\s+([\d.]+).*?val/pose_loss:\s+([\d.]+)", text
+        )
+        if val_match:
+            val_box = float(val_match.group(1))
+            val_pose = float(val_match.group(2))
+            status_lbl.setText(f"Validation - box: {val_box:.3f}, pose: {val_pose:.3f}")
+
+        # Look for "Training complete" or "Results saved"
+        if "Training complete" in text or "Results saved to" in text:
+            status_lbl.setText("✓ Training complete!")
+            progress.setValue(progress.maximum())
+
+        # Look for early stopping
+        if "Stopping training early" in text or "EarlyStopping" in text:
+            status_lbl.setText("⚠ Training stopped early (patience reached)")
+
+        # Look for fitness collapse warnings
+        if "fitness collapse" in text.lower():
+            status_lbl.setText("❌ Training failed: fitness collapse")
+
+        # === GENERAL PROGRESS ===
+        # Look for generic "X% complete" or similar
+        pct_match = re.search(r"(\d+)%", text)
+        if pct_match and "complete" in text.lower():
+            pct = int(pct_match.group(1))
+            progress.setRange(0, 100)
+            progress.setValue(pct)
 
     # ========== FOLDER OPENING METHODS ==========
     def _open_review_folder(self):

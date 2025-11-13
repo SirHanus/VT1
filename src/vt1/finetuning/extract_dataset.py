@@ -348,7 +348,7 @@ class HockeyPoseDatasetExtractor:
             # Progress update
             if (idx + 1) % 10 == 0:
                 logger.info(
-                    f"Processed {idx + 1}/{len(frames)} frames ({total_detections}/{max_players} players)"
+                    f"Frame {idx + 1}/{len(frames)} - Total players extracted: {total_detections}/{max_players}"
                 )
 
         # Save metadata
@@ -401,13 +401,19 @@ class HockeyPoseDatasetExtractor:
             video_files.extend(self.videos_dir.rglob(ext))
 
         if not video_files:
-            logger.error(f"No video files found in {self.videos_dir}")
+            msg = f"No video files found in {self.videos_dir}"
+            print(msg)
+            logger.error(msg)
             return
 
-        logger.info("=" * 60)
-        logger.info(f"Found {len(video_files)} videos in {self.videos_dir}")
-        logger.info(f"Will extract {players_per_video} players from each video")
-        logger.info("=" * 60)
+        print("=" * 60)
+        print(f"Found {len(video_files)} videos in {self.videos_dir}")
+        print(f"Will extract {players_per_video} players from each video")
+        print("=" * 60)
+
+        logger.info(
+            f"Found {len(video_files)} videos, extracting {players_per_video} players each"
+        )
 
         total_players = 0
         processed_videos = 0
@@ -423,21 +429,27 @@ class HockeyPoseDatasetExtractor:
                 total_players += players_extracted
                 processed_videos += 1
             except Exception as e:
-                logger.error(f"Error processing {video_file}: {e}")
+                error_msg = f"Error processing {video_file}: {e}"
+                print(error_msg)
+                logger.error(error_msg)
                 continue
 
-        logger.info("=" * 60)
-        logger.info("EXTRACTION COMPLETE!")
-        logger.info("=" * 60)
-        logger.info(f"  Videos processed: {processed_videos}/{len(video_files)}")
-        logger.info(f"  Total players extracted: {total_players}")
-        logger.info(
+        print("=" * 60)
+        print("EXTRACTION COMPLETE!")
+        print("=" * 60)
+        print(f"  Videos processed: {processed_videos}/{len(video_files)}")
+        print(f"  Total players extracted: {total_players}")
+        print(
             f"  Average per video: {total_players/processed_videos:.1f}"
             if processed_videos > 0
             else "  No videos processed"
         )
-        logger.info(f"  Review directory: {self.review_dir}/players/")
-        logger.info("=" * 60)
+        print(f"  Review directory: {self.review_dir}/players/")
+        print("=" * 60)
+
+        logger.info(
+            f"EXTRACTION COMPLETE: {total_players} players from {processed_videos} videos"
+        )
 
     def export_yolo_dataset(self, train_split: float = 0.8):
         """
@@ -520,10 +532,6 @@ class HockeyPoseDatasetExtractor:
                 if not has_valid_keypoints:
                     # Skip this image - no valid keypoints detected
                     skipped[split] += 1
-                    if (idx + 1) % 50 == 0:
-                        logger.info(
-                            f"  Processed {idx + 1}/{len(data)} images ({skipped[split]} skipped)"
-                        )
                     continue
 
                 # Copy image
@@ -552,10 +560,12 @@ class HockeyPoseDatasetExtractor:
                     f.write(" ".join(line_parts) + "\n")
 
                 saved_count += 1
-                if saved_count % 100 == 0:
-                    logger.info(
-                        f"  Saved {saved_count} images ({skipped[split]} skipped)"
-                    )
+
+            # Show final count for this split
+            print(
+                f"  [{split}] ✓ Completed: {saved_count} images saved, {skipped[split]} skipped"
+            )
+            logger.info(f"{split} split: {saved_count} saved, {skipped[split]} skipped")
 
         # Create dataset.yaml
         yaml_content = f"""# Hockey Players Pose Dataset
@@ -579,20 +589,22 @@ flip_idx: [0, 2, 1, 4, 3, 6, 5, 8, 7, 10, 9, 12, 11, 14, 13, 16, 15]
         with open(yaml_path, "w") as f:
             f.write(yaml_content)
 
-        logger.info("=" * 60)
-        logger.info("Dataset exported successfully!")
-        logger.info(f"  Dataset YAML: {yaml_path}")
-        logger.info(
+        print("=" * 60)
+        print("Dataset exported successfully!")
+        print(f"  Dataset YAML: {yaml_path}")
+        print(
             f"  Training images: {len(train_data) - skipped['train']} (skipped {skipped['train']})"
         )
-        logger.info(
+        print(
             f"  Validation images: {len(val_data) - skipped['val']} (skipped {skipped['val']})"
         )
-        logger.info("\nTo train YOLO11x-pose:")
+        print("\nTo train YOLO11x-pose:")
+        print(f"  yolo pose train data={yaml_path} model=yolo11x-pose.pt epochs=100")
+        print("=" * 60)
+
         logger.info(
-            f"  yolo pose train data={yaml_path} model=yolo11x-pose.pt epochs=100"
+            f"Dataset exported: {len(train_data) - skipped['train']} train, {len(val_data) - skipped['val']} val images"
         )
-        logger.info("=" * 60)
 
 
 def main():

@@ -159,18 +159,32 @@ def main():
     logger.info(f"Loading model: {model_name}")
     model = YOLO(model_name)
 
-    logger.info(f"Starting training with parameters: {kwargs}")
+    logger.info("=" * 60)
+    logger.info("Starting YOLO Pose Training")
+    logger.info("=" * 60)
+    logger.info(f"Model: {model_name}")
+    logger.info(f"Dataset: {data_yaml}")
+    logger.info(f"Training images: {train_count}")
+    logger.info(f"Validation images: {val_count}")
+    logger.info(f"Epochs: {kwargs.get('epochs', 'default')}")
+    logger.info(f"Batch size: {kwargs.get('batch', 'auto')}")
+    logger.info(f"Image size: {kwargs.get('imgsz', 640)}")
+    logger.info(f"Project dir: {kwargs.get('project', 'runs')}")
+    logger.info("=" * 60)
+    logger.info("Training in progress... (this may take a while)")
+    logger.info("=" * 60)
 
     try:
         results = model.train(**kwargs)
         logger.info("=" * 60)
-        logger.info("Training complete!")
+        logger.info("✓ Training complete!")
         logger.info("=" * 60)
 
         # Print results location
         if hasattr(results, "save_dir"):
             logger.info(f"Results saved to: {results.save_dir}")
             logger.info(f"Best model: {results.save_dir}/weights/best.pt")
+            logger.info(f"Last model: {results.save_dir}/weights/last.pt")
 
         return 0
 
@@ -230,14 +244,16 @@ if __name__ == "__main__":
     try:
         sys.exit(main())
     except Exception as e:
-        logger.error("=" * 60)
-        logger.error("Unexpected error during training:")
-        logger.error("=" * 60)
-        logger.error(str(e))
-        logger.error("")
-        logger.error("Full traceback:")
+        print("=" * 60)
+        print("❌ Unexpected error during training:")
+        print("=" * 60)
+        print(str(e))
+        print("")
+        print("Full traceback:")
         import traceback
 
         traceback.print_exc()
-        logger.error("=" * 60)
+        print("=" * 60)
+
+        logger.error("Unexpected error during training", exc_info=True)
         sys.exit(1)
