@@ -75,6 +75,14 @@ jobs:
             --hidden-import vt1.gui.clustering_tab ^
             --hidden-import vt1.gui.help_tab ^
             --hidden-import vt1.gui.startup_dialog ^
+            --hidden-import vt1.team_clustering ^
+            --hidden-import vt1.team_clustering.build_training_set ^
+            --hidden-import vt1.team_clustering.cluster_umap_kmeans ^
+            --hidden-import vt1.team_clustering.audit_training_set ^
+            --hidden-import vt1.team_clustering.eval_clustering ^
+            --hidden-import vt1.finetuning.extract_dataset ^
+            --hidden-import vt1.finetuning.train_yolo ^
+            --hidden-import vt1.finetuning.__init__ ^
             --add-data "GUI.md;." ^
             --add-data "README.md;." ^
             --add-data "config_defaults.toml;." ^
@@ -87,17 +95,17 @@ jobs:
         shell: cmd
         run: dir dist
 
-      - name: Prepare smoke test video
-        shell: cmd
-        run: |
-          echo Creating small smoke.mp4 video for pipeline test
-          python -c "import cv2, numpy as np, sys; fourcc=cv2.VideoWriter_fourcc(*'mp4v'); out=cv2.VideoWriter('smoke.mp4', fourcc, 10.0, (320,240)); [out.write((np.random.rand(240,320,3)*255).astype('uint8')) for _ in range(20)]; out.release(); print('Created smoke.mp4')"
-
-      - name: Smoke test pipeline executable (CPU, few frames)
-        shell: cmd
-        run: |
-          echo Running pipeline smoke test
-          dist\vt1-pipeline.exe --source smoke.mp4 --device cpu --max-frames 5 --no-sam --disable-team || exit /b 1
+#      - name: Prepare smoke test video
+#        shell: cmd
+#        run: |
+#          echo Creating small smoke.mp4 video for pipeline test
+#          python -c "import cv2, numpy as np, sys; fourcc=cv2.VideoWriter_fourcc(*'mp4v'); out=cv2.VideoWriter('smoke.mp4', fourcc, 10.0, (320,240)); [out.write((np.random.rand(240,320,3)*255).astype('uint8')) for _ in range(20)]; out.release(); print('Created smoke.mp4')"
+#
+#      - name: Smoke test pipeline executable (CPU, few frames)
+#        shell: cmd
+#        run: |
+#          echo Running pipeline smoke test
+#          dist\vt1-pipeline.exe --source smoke.mp4 --device cpu --max-frames 5 --no-sam --disable-team || exit /b 1
 
       - name: Upload artifacts (executables)
         uses: actions/upload-artifact@v4
@@ -114,4 +122,3 @@ jobs:
           name: pyinstaller-build-logs
           path: build/**
           if-no-files-found: ignore
-

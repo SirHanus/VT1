@@ -292,9 +292,15 @@ class TrainingWorkflowRunner(QtWidgets.QWidget):
         self._log(f"{'=' * 60}\n")
 
         py = sys.executable or "python"
-        full_args = ["-m", module] + args
+        frozen = getattr(sys, "frozen", False)
+        if frozen:
+            cmd = sys.executable
+            full_args = ["--module-run", module] + args
+        else:
+            cmd = py
+            full_args = ["-m", module] + args
 
-        self._log(f"[CMD] {py} {' '.join(full_args)}\n\n")
+        self._log(f"[CMD] {cmd} {' '.join(full_args)}\n\n")
 
         self.proc = QtCore.QProcess(self)
         self.proc.setProcessChannelMode(
@@ -305,7 +311,7 @@ class TrainingWorkflowRunner(QtWidgets.QWidget):
             lambda code, status: self._on_step_finished(step_idx, code, status)
         )
 
-        self.proc.start(py, full_args)
+        self.proc.start(cmd, full_args)
         if not self.proc.waitForStarted(5000):
             self._log("[ERROR] Failed to start process\n")
             self._on_complete(False)

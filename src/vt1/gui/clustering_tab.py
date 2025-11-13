@@ -30,7 +30,6 @@ class ClusteringTab(QtWidgets.QWidget):
                 self, "Already running", "Stop the current process first."
             )
             return
-        py = sys.executable or "python"
         proc = QtCore.QProcess(self)
         env = QtCore.QProcessEnvironment.systemEnvironment()
         src_path = str(self._repo_root() / "src")
@@ -49,14 +48,22 @@ class ClusteringTab(QtWidgets.QWidget):
         proc.finished.connect(
             lambda code, status, w=widgets: self._on_finished(code, status, w)
         )
-        full_args = ["-m", module_name, *args]
+
+        frozen = getattr(sys, "frozen", False)
+        if frozen:
+            # Use the GUI exe with headless dispatcher to run module without opening a new window
+            cmd = sys.executable
+            full_args = ["--module-run", module_name, *args]
+        else:
+            # Dev: use python -m <module>
+            cmd = sys.executable or "python"
+            full_args = ["-m", module_name, *args]
+
         widgets["log"].appendPlainText(
-            "[GUI] Command: {} {}".format(
-                py, " ".join(self._quote(a) for a in full_args)
-            )
+            f"[GUI] Command: {cmd} {' '.join(self._quote(a) for a in full_args)}"
         )
         try:
-            proc.start(py, full_args)
+            proc.start(cmd, full_args)
             if not proc.waitForStarted(5000):
                 raise RuntimeError("Failed to start process")
         except Exception as e:

@@ -264,65 +264,30 @@ class PipelineTab(QtWidgets.QWidget):
         self.proc.finished.connect(self._on_finished)
         self.proc.errorOccurred.connect(self._on_proc_error)
 
-        # Choose how to launch the pipeline
         frozen = getattr(sys, "frozen", False)
-        cmd: list[str]
         if frozen:
-            # Look for a sibling vt1-pipeline.exe next to the GUI executable
-            exe_dir = Path(sys.executable).resolve().parent
-            pipeline_exe = exe_dir / (
-                "vt1-pipeline.exe" if os.name == "nt" else "vt1-pipeline"
-            )
-            if pipeline_exe.exists():
-                cmd = [str(pipeline_exe), *args]
-                self._append_log(
-                    "[GUI] Command: {}\n".format(" ".join(self._quote(a) for a in cmd))
-                )
-                try:
-                    self.proc.start(cmd[0], cmd[1:])
-                    if not self.proc.waitForStarted(5000):
-                        raise RuntimeError("Failed to start pipeline exe")
-                except Exception as e:
-                    self._append_log(f"[GUI] Failed to start: {e}\n")
-                    self._cleanup_proc()
-                    QtWidgets.QMessageBox.critical(self, "Failed to start", str(e))
-                    return
-            else:
-                # Fallback: try a system Python to run the module
-                py = "python"
-                full_args = ["-m", "vt1.pipeline.sam_offline", *args]
-                self._append_log(
-                    "[GUI] Command: {} {}\n".format(
-                        py, " ".join(self._quote(a) for a in full_args)
-                    )
-                )
-                try:
-                    self.proc.start(py, full_args)
-                    if not self.proc.waitForStarted(5000):
-                        raise RuntimeError("Failed to start process")
-                except Exception as e:
-                    self._append_log(f"[GUI] Failed to start: {e}\n")
-                    self._cleanup_proc()
-                    QtWidgets.QMessageBox.critical(self, "Failed to start", str(e))
-                    return
+            # Use GUI exe headless dispatcher to avoid spawning extra window
+            cmd = sys.executable
+            full_args = ["--module-run", "vt1.pipeline.sam_offline", *args]
         else:
-            # Dev mode: run module vt1.pipeline.sam_offline
             py = sys.executable or "python"
+            cmd = py
             full_args = ["-m", "vt1.pipeline.sam_offline", *args]
-            self._append_log(
-                "[GUI] Command: {} {}\n".format(
-                    py, " ".join(self._quote(a) for a in full_args)
-                )
+
+        self._append_log(
+            "[GUI] Command: {} {}\n".format(
+                cmd, " ".join(self._quote(a) for a in full_args)
             )
-            try:
-                self.proc.start(py, full_args)
-                if not self.proc.waitForStarted(5000):
-                    raise RuntimeError("Failed to start process")
-            except Exception as e:
-                self._append_log(f"[GUI] Failed to start: {e}\n")
-                self._cleanup_proc()
-                QtWidgets.QMessageBox.critical(self, "Failed to start", str(e))
-                return
+        )
+        try:
+            self.proc.start(cmd, full_args)
+            if not self.proc.waitForStarted(5000):
+                raise RuntimeError("Failed to start process")
+        except Exception as e:
+            self._append_log(f"[GUI] Failed to start: {e}\n")
+            self._cleanup_proc()
+            QtWidgets.QMessageBox.critical(self, "Failed to start", str(e))
+            return
 
         self.btn_run.setEnabled(False)
         self.btn_stop.setEnabled(True)

@@ -172,9 +172,10 @@ class FinetuningTab(QtWidgets.QWidget):
             "After extracting and reviewing images (in review/players/ folder), "
             "export to YOLO pose format for training. Delete poor quality images before exporting."
         )
+
         info.setWordWrap(True)
         info.setStyleSheet(
-            "QLabel { padding: 8px; background-color: #e3f2fd; border-radius: 4px; }"
+            "QLabel { padding: 8px; background-color: #e3f2fd; border-radius: 4px; font-color: #0d47a1; }"
         )
         export_vlay.addWidget(info)
 
@@ -813,7 +814,18 @@ class FinetuningTab(QtWidgets.QWidget):
         finished_callback,
     ):
         """Start a subprocess."""
-        py = sys.executable or "python"
+        frozen = getattr(sys, "frozen", False)
+        # Existing args expected like ["-m", "vt1.finetuning.extract_dataset", ...]
+        if frozen and len(args) >= 2 and args[0] == "-m":
+            module = args[1]
+            mod_args = args[2:]
+            cmd = sys.executable
+            launch_args = ["--module-run", module, *mod_args]
+        else:
+            py = sys.executable or "python"
+            cmd = py
+            launch_args = args
+
         proc = QtCore.QProcess(self)
 
         # Set environment
@@ -840,12 +852,12 @@ class FinetuningTab(QtWidgets.QWidget):
 
         # Log command
         log.appendPlainText(
-            f"[GUI] Command: {py} {' '.join(self._quote(a) for a in args)}\n"
+            f"[GUI] Command: {cmd} {' '.join(self._quote(a) for a in launch_args)}\n"
         )
 
         # Start process
         try:
-            proc.start(py, args)
+            proc.start(cmd, launch_args)
             if not proc.waitForStarted(5000):
                 raise RuntimeError("Failed to start process")
         except Exception as e:

@@ -108,4 +108,28 @@ if __name__ == "__main__":
     import multiprocessing
 
     multiprocessing.freeze_support()
+
+    # Headless dispatcher: allow running modules via the frozen GUI exe without opening a window
+    # Usage: vt1-gui.exe --module-run <module.name> [args...]
+    if len(sys.argv) > 1 and sys.argv[1] == "--module-run":
+        import runpy
+
+        if len(sys.argv) < 3:
+            print("Usage: --module-run <module> [args...]", file=sys.stderr)
+            sys.exit(2)
+        module_name = sys.argv[2]
+        module_args = sys.argv[3:]
+        # Simulate `python -m module_name [args...]`
+        sys.argv = [module_name] + module_args
+        try:
+            runpy.run_module(module_name, run_name="__main__", alter_sys=True)
+            sys.exit(0)
+        except SystemExit as e:
+            # Propagate exit codes from the target module
+            raise
+        except Exception as e:
+            print(f"[GUI] Headless module-run failed: {e}", file=sys.stderr)
+            sys.exit(1)
+
+    # Otherwise, launch the GUI normally
     main()
