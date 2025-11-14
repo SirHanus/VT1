@@ -10,8 +10,8 @@ from pathlib import Path
 frozen = getattr(sys, "frozen", False)
 if frozen:
     # Running as exe: use AppData/Local/vt1 as base for all cache/data
-    app_data = Path(os.environ.get("LOCALAPPDATA", os.path.expanduser("~/.local")))
-    vt1_base = app_data / "vt1"
+    # app_data = Path(os.environ.get("LOCALAPPDATA", os.path.expanduser("~/.local")))
+    vt1_base = Path(".") / "vt1"
 
     # Set Hugging Face cache directories
     if "HF_HOME" not in os.environ:

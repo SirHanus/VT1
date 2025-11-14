@@ -563,7 +563,7 @@ class HockeyPoseDatasetExtractor:
 
             # Show final count for this split
             print(
-                f"  [{split}] ✓ Completed: {saved_count} images saved, {skipped[split]} skipped"
+                f"  [{split}] [OK] Completed: {saved_count} images saved, {skipped[split]} skipped"
             )
             logger.info(f"{split} split: {saved_count} saved, {skipped[split]} skipped")
 

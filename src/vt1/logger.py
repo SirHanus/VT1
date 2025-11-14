@@ -173,7 +173,12 @@ def ensure_root_logger(log_dir: Optional[Path] = None, level: int = logging.INFO
     if root.level > level:
         root.setLevel(level)
 
-    print(f"✓ Root logger configured with file handler: {log_file}")
+    # Use ASCII-safe characters for console output to avoid encoding issues
+    try:
+        print(f"[OK] Root logger configured with file handler: {log_file}")
+    except UnicodeEncodeError:
+        # Fallback if even this fails
+        print(f"Root logger configured with file handler: {log_file}")
 
 
 def get_logger(name: str) -> logging.Logger:

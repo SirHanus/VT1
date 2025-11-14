@@ -177,7 +177,7 @@ def main():
     try:
         results = model.train(**kwargs)
         logger.info("=" * 60)
-        logger.info("✓ Training complete!")
+        logger.info("[OK] Training complete!")
         logger.info("=" * 60)
 
         # Print results location
@@ -245,7 +245,7 @@ if __name__ == "__main__":
         sys.exit(main())
     except Exception as e:
         print("=" * 60)
-        print("❌ Unexpected error during training:")
+        print("[ERROR] Unexpected error during training:")
         print("=" * 60)
         print(str(e))
         print("")
