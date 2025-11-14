@@ -28,6 +28,7 @@ class FinetuningTab(QtWidgets.QWidget):
         # Process tracking
         self.extract_proc: Optional[QtCore.QProcess] = None
         self.export_proc: Optional[QtCore.QProcess] = None
+        self.ls_proc: Optional[QtCore.QProcess] = None
         self.train_proc: Optional[QtCore.QProcess] = None
 
         # Build UI
@@ -234,6 +235,83 @@ class FinetuningTab(QtWidgets.QWidget):
 
         export_group.setLayout(export_vlay)
         vlay.addWidget(export_group)
+
+        # ========== Label Studio Export section ==========
+        ls_group = QtWidgets.QGroupBox("Export for Label Studio (Under Development)")
+        ls_group.setEnabled(False)  # Disable entire section
+        ls_vlay = QtWidgets.QVBoxLayout()
+
+        ls_info = QtWidgets.QLabel("⚠️ UNDER DEVELOPMENT ⚠️\n\n")
+        ls_info.setWordWrap(True)
+        ls_info.setStyleSheet(
+            """
+            QLabel {
+                padding: 8px;
+                background-color: #f5f5f5;   /* light gray background */
+                border-radius: 4px;
+                color: #757575;              /* gray text */
+                font-size: 11pt;             /* slightly larger text */
+            }
+        """
+        )
+        ls_vlay.addWidget(ls_info)
+
+        # Configuration
+        ls_form = QtWidgets.QFormLayout()
+
+        # Max frames per video
+        self.ls_max_frames_sb = QtWidgets.QSpinBox()
+        self.ls_max_frames_sb.setRange(10, 500)
+        self.ls_max_frames_sb.setSingleStep(10)
+        self.ls_max_frames_sb.setValue(50)
+        self.ls_max_frames_sb.setToolTip("Maximum number of frames to export per video")
+        ls_form.addRow("Max Frames/Video:", self.ls_max_frames_sb)
+
+        # Include predictions checkbox
+        self.ls_predictions_cb = QtWidgets.QCheckBox(
+            "Include Bounding Boxes & Keypoints"
+        )
+        self.ls_predictions_cb.setChecked(True)
+        self.ls_predictions_cb.setToolTip(
+            "Include detected bounding boxes and keypoints as pre-annotations"
+        )
+        ls_form.addRow("Pre-annotations:", self.ls_predictions_cb)
+
+        ls_vlay.addLayout(ls_form)
+
+        # Export status
+        self.ls_progress = QtWidgets.QProgressBar()
+        self.ls_progress.setRange(0, 100)
+        ls_vlay.addWidget(self.ls_progress)
+
+        self.ls_status_lbl = QtWidgets.QLabel("Ready")
+        ls_vlay.addWidget(self.ls_status_lbl)
+
+        self.ls_log = QtWidgets.QPlainTextEdit()
+        self.ls_log.setReadOnly(True)
+        self.ls_log.setMaximumBlockCount(500)
+        self.ls_log.setFont(QtGui.QFont("Courier New", 9))
+        self.ls_log.setMaximumHeight(150)
+        ls_vlay.addWidget(self.ls_log)
+
+        # Label Studio export buttons
+        ls_btn_row = QtWidgets.QHBoxLayout()
+        self.ls_run_btn = QtWidgets.QPushButton("Export for Label Studio")
+        self.ls_run_btn.clicked.connect(self._run_label_studio_export)
+        self.ls_stop_btn = QtWidgets.QPushButton("Stop")
+        self.ls_stop_btn.setEnabled(False)
+        self.ls_stop_btn.clicked.connect(self._stop_label_studio_export)
+        self.ls_open_btn = QtWidgets.QPushButton("Open Label Studio Folder")
+        self.ls_open_btn.clicked.connect(self._open_label_studio_folder)
+
+        ls_btn_row.addWidget(self.ls_run_btn)
+        ls_btn_row.addWidget(self.ls_stop_btn)
+        ls_btn_row.addStretch()
+        ls_btn_row.addWidget(self.ls_open_btn)
+        ls_vlay.addLayout(ls_btn_row)
+
+        ls_group.setLayout(ls_vlay)
+        vlay.addWidget(ls_group)
 
         # Load defaults
         self._load_extract_defaults()
@@ -691,6 +769,104 @@ class FinetuningTab(QtWidgets.QWidget):
             )
         else:
             self.export_status_lbl.setText(f"Export failed (code {code})")
+
+    # ========== LABEL STUDIO EXPORT METHODS ==========
+    def _run_label_studio_export(self):
+        """Run Label Studio export."""
+        if self.ls_proc is not None:
+            QtWidgets.QMessageBox.warning(
+                self, "Already Running", "Stop the current export first."
+            )
+            return
+
+        # Build command
+        args = [
+            "-m",
+            "vt1.finetuning.extract_dataset",
+            "--export-label-studio",
+            "--output-dir",
+            self.extract_output_ed.text(),
+            "--max-frames-per-video",
+            str(self.ls_max_frames_sb.value()),
+            "--frame-interval",
+            str(self.extract_interval_sb.value()),
+        ]
+
+        # Add --no-predictions flag if checkbox is unchecked
+        if not self.ls_predictions_cb.isChecked():
+            args.append("--no-predictions")
+
+        # Update videos_dir in extractor
+        os.environ["VT1_VIDEOS_DIR"] = self.extract_videos_ed.text()
+
+        self._start_process(
+            args,
+            self.ls_proc,
+            self.ls_log,
+            self.ls_status_lbl,
+            self.ls_progress,
+            self.ls_run_btn,
+            self.ls_stop_btn,
+            self._on_label_studio_export_finished,
+        )
+
+    def _stop_label_studio_export(self):
+        """Stop Label Studio export process."""
+        self._stop_process(
+            self.ls_proc,
+            self.ls_log,
+            self.ls_status_lbl,
+            self.ls_progress,
+            self.ls_run_btn,
+            self.ls_stop_btn,
+        )
+        self.ls_proc = None
+
+    def _on_label_studio_export_finished(self, code: int, status):
+        """Handle Label Studio export process finished."""
+        self.ls_proc = None
+        self.ls_run_btn.setEnabled(True)
+        self.ls_stop_btn.setEnabled(False)
+        self.ls_progress.setRange(0, 100)
+        self.ls_progress.setValue(100 if code == 0 else 0)
+
+        if code == 0:
+            self.ls_status_lbl.setText("Label Studio export complete!")
+
+            # Get the label studio folder path
+            output_dir = Path(self.extract_output_ed.text())
+            ls_dir = output_dir / "label_studio"
+            readme_path = ls_dir / "README.md"
+
+            msg = "Label Studio export complete!\n\n"
+            if readme_path.exists():
+                msg += f"See {readme_path.name} for import instructions."
+            else:
+                msg += "Files exported to label_studio/ folder."
+
+            QtWidgets.QMessageBox.information(
+                self,
+                "Complete",
+                msg,
+            )
+        else:
+            self.ls_status_lbl.setText(f"Export failed (code {code})")
+
+    def _open_label_studio_folder(self):
+        """Open Label Studio export folder in file explorer."""
+        output_dir = Path(self.extract_output_ed.text())
+        ls_dir = output_dir / "label_studio"
+
+        if not ls_dir.exists():
+            QtWidgets.QMessageBox.warning(
+                self,
+                "Folder Not Found",
+                f"Label Studio export folder not found:\n{ls_dir}\n\n"
+                "Run 'Export for Label Studio' first.",
+            )
+            return
+
+        self._open_folder(ls_dir)
 
     # ========== TRAINING METHODS ==========
     def _run_train(self):

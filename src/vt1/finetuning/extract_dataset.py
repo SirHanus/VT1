@@ -451,6 +451,220 @@ class HockeyPoseDatasetExtractor:
             f"EXTRACTION COMPLETE: {total_players} players from {processed_videos} videos"
         )
 
+    def export_for_label_studio(
+        self,
+        frame_interval: int = 30,
+        max_frames_per_video: int = 50,
+        include_predictions: bool = True,
+    ):
+        """
+        Export full frames with detections for Label Studio import.
+
+        Args:
+            frame_interval: Extract every Nth frame
+            max_frames_per_video: Maximum frames to export per video
+            include_predictions: Include bounding boxes and keypoints as pre-annotations
+        """
+        logger.info("=" * 60)
+        logger.info("Exporting frames for Label Studio")
+        logger.info("=" * 60)
+
+        # Create Label Studio export directory
+        ls_dir = self.output_dir / "label_studio"
+        ls_images_dir = ls_dir / "images"
+        ls_images_dir.mkdir(parents=True, exist_ok=True)
+
+        # Find all video files
+        if not self.videos_dir.exists():
+            logger.error(f"Videos directory not found: {self.videos_dir}")
+            return
+
+        video_files = []
+        for ext in ["*.mp4", "*.avi", "*.MP4", "*.AVI"]:
+            video_files.extend(self.videos_dir.rglob(ext))
+
+        if not video_files:
+            logger.error(f"No video files found in {self.videos_dir}")
+            return
+
+        logger.info(f"Found {len(video_files)} videos")
+
+        # Storage for Label Studio tasks
+        ls_tasks = []
+        total_frames_exported = 0
+
+        for video_file in video_files:
+            video_name = video_file.stem
+            logger.info(f"Processing {video_name}...")
+
+            # Extract frames
+            frames = self.extract_frames(
+                str(video_file), frame_interval, max_frames=max_frames_per_video
+            )
+
+            for frame_idx, (frame_num, frame) in enumerate(frames):
+                # Save full frame
+                img_filename = f"{video_name}_frame_{frame_num:06d}.jpg"
+                img_path = ls_images_dir / img_filename
+                cv2.imwrite(str(img_path), frame)
+
+                # Create Label Studio task
+                task = {
+                    "data": {
+                        "image": f"/data/local-files/?d=label_studio/images/{img_filename}"
+                    },
+                    "meta": {
+                        "video": video_name,
+                        "frame_number": frame_num,
+                        "frame_index": frame_idx,
+                    },
+                }
+
+                # Add predictions if requested
+                if include_predictions:
+                    detections = self.detect_players_with_pose(frame)
+
+                    if detections:
+                        h, w = frame.shape[:2]
+                        predictions = []
+
+                        for det_idx, det in enumerate(detections):
+                            x1, y1, x2, y2 = det["bbox"]
+
+                            # Convert to Label Studio format (percentage)
+                            bbox_x = (x1 / w) * 100
+                            bbox_y = (y1 / h) * 100
+                            bbox_width = ((x2 - x1) / w) * 100
+                            bbox_height = ((y2 - y1) / h) * 100
+
+                            # Create prediction with bounding box
+                            prediction = {
+                                "id": f"pred_{det_idx}",
+                                "type": "rectanglelabels",
+                                "value": {
+                                    "x": bbox_x,
+                                    "y": bbox_y,
+                                    "width": bbox_width,
+                                    "height": bbox_height,
+                                    "rotation": 0,
+                                    "rectanglelabels": ["player"],
+                                },
+                                "from_name": "label",
+                                "to_name": "image",
+                                "original_width": w,
+                                "original_height": h,
+                            }
+
+                            # Add keypoints if available
+                            if det["keypoints"] is not None:
+                                keypoints_data = []
+                                kpts = det["keypoints"]
+
+                                for kp_idx, kpt in enumerate(kpts):
+                                    x, y, vis = kpt
+                                    if vis > 0.5:  # Only include visible keypoints
+                                        keypoints_data.append(
+                                            {
+                                                "x": (x / w) * 100,
+                                                "y": (y / h) * 100,
+                                                "keypointlabels": [f"kp_{kp_idx}"],
+                                            }
+                                        )
+
+                                if keypoints_data:
+                                    prediction["keypoints"] = keypoints_data
+
+                            predictions.append(prediction)
+
+                        task["predictions"] = [{"result": predictions}]
+
+                ls_tasks.append(task)
+                total_frames_exported += 1
+
+            logger.info(
+                f"  Exported {len(frames)} frames from {video_name} (total: {total_frames_exported})"
+            )
+
+        # Save Label Studio import file
+        ls_json_path = ls_dir / "import.json"
+        with open(ls_json_path, "w") as f:
+            json.dump(ls_tasks, f, indent=2)
+
+        # Create Label Studio config template
+        ls_config = """<View>
+  <Image name="image" value="$image"/>
+  <RectangleLabels name="label" toName="image">
+    <Label value="player" background="green"/>
+    <Label value="referee" background="blue"/>
+    <Label value="goalie" background="red"/>
+  </RectangleLabels>
+  <KeyPointLabels name="kp-label" toName="image">
+    <Label value="kp_0" background="#FFA39E"/>
+    <Label value="kp_1" background="#FFA39E"/>
+    <Label value="kp_2" background="#FFA39E"/>
+    <Label value="kp_3" background="#FFA39E"/>
+    <Label value="kp_4" background="#FFA39E"/>
+    <Label value="kp_5" background="#D3F261"/>
+    <Label value="kp_6" background="#D3F261"/>
+    <Label value="kp_7" background="#95DE64"/>
+    <Label value="kp_8" background="#95DE64"/>
+    <Label value="kp_9" background="#5CDBD3"/>
+    <Label value="kp_10" background="#5CDBD3"/>
+    <Label value="kp_11" background="#69C0FF"/>
+    <Label value="kp_12" background="#69C0FF"/>
+    <Label value="kp_13" background="#B37FEB"/>
+    <Label value="kp_14" background="#B37FEB"/>
+    <Label value="kp_15" background="#FF85C0"/>
+    <Label value="kp_16" background="#FF85C0"/>
+  </KeyPointLabels>
+</View>"""
+
+        config_path = ls_dir / "labeling_config.xml"
+        with open(config_path, "w") as f:
+            f.write(ls_config)
+
+        # Create README
+        readme_content = f"""# Label Studio Import
+
+## Files Generated:
+- `images/`: Full frame images ({total_frames_exported} images)
+- `import.json`: Label Studio import file with pre-annotations
+- `labeling_config.xml`: Label Studio labeling interface configuration
+
+## Import Instructions:
+
+1. Create a new project in Label Studio
+2. Go to Settings > Labeling Interface
+3. Copy content from `labeling_config.xml` into the configuration
+4. Go to Settings > Cloud Storage
+5. Add a local file storage pointing to: `{ls_images_dir.absolute()}`
+6. Import data from `import.json`
+
+## Pre-annotations:
+- Bounding boxes are included for all detected players
+- Keypoints are included where visible
+- Review and correct annotations as needed
+
+## Videos processed: {len(video_files)}
+## Total frames exported: {total_frames_exported}
+"""
+
+        readme_path = ls_dir / "README.md"
+        with open(readme_path, "w") as f:
+            f.write(readme_content)
+
+        print("=" * 60)
+        print("Label Studio export complete!")
+        print("=" * 60)
+        print(f"  Output directory: {ls_dir}")
+        print(f"  Frames exported: {total_frames_exported}")
+        print(f"  Import file: {ls_json_path}")
+        print(f"  Config file: {config_path}")
+        print(f"\nSee {readme_path} for import instructions")
+        print("=" * 60)
+
+        logger.info(f"Label Studio export: {total_frames_exported} frames to {ls_dir}")
+
     def export_yolo_dataset(self, train_split: float = 0.8):
         """
         Export final dataset in YOLO pose format after manual review.
@@ -673,6 +887,22 @@ def main():
         default=0.8,
         help="Train/val split ratio",
     )
+    parser.add_argument(
+        "--export-label-studio",
+        action="store_true",
+        help="Export full frames with pre-annotations for Label Studio",
+    )
+    parser.add_argument(
+        "--max-frames-per-video",
+        type=int,
+        default=50,
+        help="Maximum frames to export per video for Label Studio (default: 50)",
+    )
+    parser.add_argument(
+        "--no-predictions",
+        action="store_true",
+        help="Don't include bounding box predictions in Label Studio export",
+    )
 
     args = parser.parse_args()
 
@@ -687,6 +917,13 @@ def main():
     if args.export:
         # Export reviewed dataset
         extractor.export_yolo_dataset(train_split=args.train_split)
+    elif args.export_label_studio:
+        # Export full frames for Label Studio
+        extractor.export_for_label_studio(
+            frame_interval=args.frame_interval,
+            max_frames_per_video=args.max_frames_per_video,
+            include_predictions=not args.no_predictions,
+        )
     elif args.process_all:
         # Process all videos in videos_all/
         extractor.process_all_videos(
@@ -755,6 +992,14 @@ def main():
         logger.info("\n  # Process specific video")
         logger.info(
             "  python -m vt1.finetuning.extract_dataset --video path/to/video.mp4 --max-players-per-video 50"
+        )
+        logger.info("\n  # Export full frames for Label Studio (with bounding boxes)")
+        logger.info(
+            "  python -m vt1.finetuning.extract_dataset --export-label-studio --max-frames-per-video 50"
+        )
+        logger.info("\n  # Export full frames for Label Studio (without predictions)")
+        logger.info(
+            "  python -m vt1.finetuning.extract_dataset --export-label-studio --no-predictions"
         )
         logger.info("\n  # Export dataset after review")
         logger.info("  python -m vt1.finetuning.extract_dataset --export")
