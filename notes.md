@@ -34,8 +34,8 @@
 - [x] Configuration system with TOML and environment variables
 
 ### November 14, 2024
-- [ ] Starting writing the paper (some chapter split etc.)
-- [ ] Finetune YOLO model? Make dataset and improve it (YOLO performance currently affects other parts too)
+- [ ] Starting writing the paper (some chapter split etc.) - Still issue with Overleaf
+- [ ] Finetune YOLO model? Make dataset and improve it (YOLO performance currently affects other parts too) - Tried need to do better dataset. Created labelstudio 
 
 
 

@@ -54,8 +54,12 @@ jobs:
       - name: Build executables (onefile only)
         shell: cmd
         run: |
+          REM Clean previous dist/build
+          if exist dist rmdir /s /q dist
+          if exist build rmdir /s /q build
           REM Pipeline (onefile)
-          pyinstaller --noconfirm --onefile ^
+          echo [INFO] Building Pipeline executable (console mode)...
+          python -m PyInstaller --noconfirm --onefile ^
             --name vt1-pipeline ^
             --paths src ^
             --additional-hooks-dir hooks ^
@@ -67,8 +71,11 @@ jobs:
             --add-data "assets\vt1.ico;assets" ^
             --noupx ^
             src\vt1\pipeline\sam_offline.py
+          if errorlevel 1 exit /b 1
+          echo [SUCCESS] Pipeline exe built successfully
           REM GUI (onefile)
-          pyinstaller --noconfirm --onefile ^
+          echo [INFO] Building GUI executable (windowed mode)...
+          python -m PyInstaller --noconfirm --onefile ^
             --name vt1-gui ^
             --additional-hooks-dir hooks ^
             --runtime-hook hooks\rthook_suppress_torch_warnings.py ^
@@ -94,6 +101,8 @@ jobs:
             --noupx ^
             --windowed ^
             src\vt1\gui\main.py
+          if errorlevel 1 exit /b 1
+          echo [SUCCESS] GUI exe built successfully
 
       - name: List dist contents
         shell: cmd

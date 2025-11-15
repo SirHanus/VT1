@@ -87,7 +87,7 @@ def main():
         # optional: silent fallback
         pass
     # Show startup dialog if first run
-    if check_first_run():
+    if True:
         choice = show_startup_dialog()
         if choice == "exit":
             # User closed the dialog - exit without marking as skipped
