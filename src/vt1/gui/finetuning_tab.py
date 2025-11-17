@@ -108,6 +108,8 @@ class FinetuningTab(QtWidgets.QWidget):
         self.train_pose_loss = []
         self.val_box_loss = []
         self.val_pose_loss = []
+        # Optional canvas for training metrics (may be None if not created)
+        self.train_metrics_canvas = None
 
         # Build UI
         vlay = QtWidgets.QVBoxLayout(self)
@@ -202,6 +204,17 @@ class FinetuningTab(QtWidgets.QWidget):
             "Minimum visible keypoints required per player"
         )
         form.addRow("Min Keypoints:", self.extract_keypoints_sb)
+
+        # Full-frames mode (save full video frames as dataset)
+        self.extract_full_frames_cb = QtWidgets.QCheckBox(
+            "Save Full Video Frames (disable detection/player extraction)"
+        )
+        self.extract_full_frames_cb.setToolTip(
+            "When checked, saves full frames as the dataset and disables detection/player extraction options"
+        )
+        self.extract_full_frames_cb.setChecked(True)
+        self.extract_full_frames_cb.toggled.connect(self._on_full_frames_toggled)
+        form.addRow("Full Frames:", self.extract_full_frames_cb)
 
         config_group.setLayout(form)
         vlay.addWidget(config_group)
@@ -649,6 +662,11 @@ class FinetuningTab(QtWidgets.QWidget):
         self.extract_interval_sb.setValue(cfg.finetuning_frame_interval)
         self.extract_conf_dsb.setValue(cfg.finetuning_detection_conf)
         self.extract_keypoints_sb.setValue(cfg.finetuning_min_keypoints)
+        # Ensure full-frames checkbox default (unchecked)
+        try:
+            self.extract_full_frames_cb.setChecked(False)
+        except Exception:
+            pass
         # Also load export defaults
         self.export_split_dsb.setValue(cfg.finetuning_train_split)
 
@@ -666,6 +684,34 @@ class FinetuningTab(QtWidgets.QWidget):
         self.train_device_cb.setCurrentText("cuda")
         self.train_name_ed.setText("hockey_pose_v1")
         self.train_patience_sb.setValue(50)
+
+    def _on_full_frames_toggled(self, checked: bool):
+        """Enable/disable detection/player-related fields when full-frames is toggled.
+
+        When full-frames is ON we disable model, players-per-video, detection confidence,
+        and min-keypoints inputs because they are not used in full-frame extraction.
+        """
+        widgets = [
+            self.extract_model_ed,
+            self.extract_model_btn,
+            self.extract_players_sb,
+            self.extract_conf_dsb,
+            self.extract_keypoints_sb,
+        ]
+
+        for w in widgets:
+            try:
+                w.setEnabled(not checked)
+            except Exception:
+                pass
+
+        # Update status label for clarity
+        if checked:
+            self.extract_status_lbl.setText(
+                "Full-frames mode: detection/player extraction disabled"
+            )
+        else:
+            self.extract_status_lbl.setText("Ready")
 
     # ========== BROWSE METHODS ==========
     def _browse_extract_output(self):
@@ -735,17 +781,31 @@ class FinetuningTab(QtWidgets.QWidget):
             self.extract_videos_ed.text(),
             "--output-dir",
             self.extract_output_ed.text(),
-            "--model",
-            self.extract_model_ed.text(),
-            "--max-players-per-video",
-            str(self.extract_players_sb.value()),
             "--frame-interval",
             str(self.extract_interval_sb.value()),
-            "--detection-conf",
-            str(self.extract_conf_dsb.value()),
-            "--min-keypoints",
-            str(self.extract_keypoints_sb.value()),
         ]
+
+        # If full-frames mode is selected, instruct CLI to save full frames and
+        # skip detection/player-specific arguments. Otherwise include detection args.
+        if (
+            getattr(self, "extract_full_frames_cb", None)
+            and self.extract_full_frames_cb.isChecked()
+        ):
+            args.extend(["--full-frames"])
+        else:
+            # include detection/player options
+            args.extend(
+                [
+                    "--model",
+                    self.extract_model_ed.text(),
+                    "--max-players-per-video",
+                    str(self.extract_players_sb.value()),
+                    "--detection-conf",
+                    str(self.extract_conf_dsb.value()),
+                    "--min-keypoints",
+                    str(self.extract_keypoints_sb.value()),
+                ]
+            )
 
         self._start_process(
             args,
@@ -974,7 +1034,11 @@ class FinetuningTab(QtWidgets.QWidget):
         self.train_pose_loss.clear()
         self.val_box_loss.clear()
         self.val_pose_loss.clear()
-        self.train_metrics_canvas.clear_plot()
+        if getattr(self, "train_metrics_canvas", None):
+            try:
+                self.train_metrics_canvas.clear_plot()
+            except Exception:
+                pass
 
         # Build command using custom training script
         model = self.train_model_cb.currentText()

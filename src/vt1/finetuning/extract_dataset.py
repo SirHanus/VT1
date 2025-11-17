@@ -47,6 +47,7 @@ class HockeyPoseDatasetExtractor:
         detection_conf: float = 0.5,
         min_keypoints: int = 5,
         videos_dir: str | None = None,
+        load_model: bool = True,
     ):
         """
         Initialize the dataset extractor.
@@ -59,7 +60,8 @@ class HockeyPoseDatasetExtractor:
             videos_dir: Directory containing hockey videos (default: videos_all/)
         """
         self.output_dir = Path(output_dir)
-        self.model = YOLO(model_path)
+        # Load model only when requested (full-frames mode doesn't need the model)
+        self.model = YOLO(model_path) if load_model else None
         self.detection_conf = detection_conf
         self.min_keypoints = min_keypoints
 
@@ -146,6 +148,11 @@ class HockeyPoseDatasetExtractor:
         Returns:
             List of detections with bounding boxes, keypoints, and crops
         """
+        if self.model is None:
+            # Model not loaded (e.g. full-frames mode) - skip detection
+            logger.debug("No model loaded, skipping detection")
+            return []
+
         results = self.model(frame, conf=self.detection_conf, verbose=False)
         detections = []
 
@@ -449,6 +456,116 @@ class HockeyPoseDatasetExtractor:
 
         logger.info(
             f"EXTRACTION COMPLETE: {total_players} players from {processed_videos} videos"
+        )
+
+    def process_all_videos_save_frames(
+        self,
+        frame_interval: int = 30,
+        max_frames_per_video: int | None = None,
+        train_split: float = 0.8,
+    ):
+        """
+        Save full frames from all videos into the dataset (train/val split).
+
+        This mode ignores player-based extraction and any detection-related options.
+
+        Args:
+            frame_interval: Extract every Nth frame
+            max_frames_per_video: Maximum frames to extract per video (None for all)
+            train_split: Fraction of images to assign to train (rest -> val)
+        """
+        if not self.videos_dir.exists():
+            logger.error(f"Videos directory not found: {self.videos_dir}")
+            return
+
+        # Find video files
+        video_files = []
+        for ext in ["*.mp4", "*.avi", "*.MP4", "*.AVI"]:
+            video_files.extend(self.videos_dir.rglob(ext))
+
+        if not video_files:
+            logger.error(f"No video files found in {self.videos_dir}")
+            return
+
+        print("=" * 60)
+        print(f"Found {len(video_files)} videos in {self.videos_dir}")
+        print("Saving full frames to dataset (no detection)")
+        print("=" * 60)
+
+        # Temp folder to collect frames before splitting
+        tmp_dir = self.output_dir / "tmp_full_frames"
+        tmp_dir.mkdir(parents=True, exist_ok=True)
+
+        saved_paths = []
+        total_saved = 0
+
+        for video_file in video_files:
+            video_name = video_file.stem
+            logger.info(f"Processing (full frames): {video_name}")
+            frames = self.extract_frames(
+                str(video_file), frame_interval, max_frames=max_frames_per_video
+            )
+
+            for frame_num, frame in frames:
+                filename = f"{video_name}_frame_{frame_num:06d}.jpg"
+                path = tmp_dir / filename
+                cv2.imwrite(str(path), frame)
+                saved_paths.append(path)
+                total_saved += 1
+
+        if total_saved == 0:
+            logger.error("No frames were extracted.")
+            return
+
+        # Shuffle and split
+        np.random.shuffle(saved_paths)
+        split_idx = int(len(saved_paths) * train_split)
+        train_list = saved_paths[:split_idx]
+        val_list = saved_paths[split_idx:]
+
+        # Ensure dataset image folders exist
+        (self.images_dir / "train").mkdir(parents=True, exist_ok=True)
+        (self.images_dir / "val").mkdir(parents=True, exist_ok=True)
+
+        # Move files into train/val
+        for p in train_list:
+            dest = self.images_dir / "train" / p.name
+            shutil.move(str(p), str(dest))
+
+        for p in val_list:
+            dest = self.images_dir / "val" / p.name
+            shutil.move(str(p), str(dest))
+
+        # Remove tmp dir
+        try:
+            tmp_dir.rmdir()
+        except Exception:
+            # If not empty or error, ignore
+            pass
+
+        print("=" * 60)
+        print("Full-frame dataset saved!")
+        print(f"  Total images: {total_saved}")
+        print(f"  Train: {len(train_list)}")
+        print(f"  Val: {len(val_list)}")
+        print(f"  Image folders: {self.images_dir}")
+        print("=" * 60)
+
+        # Write a minimal dataset.yaml to help later steps
+        yaml_content = f"""# Full-frame dataset
+path: {self.output_dir.absolute()}
+train: images/train
+val: images/val
+
+names:
+  0: hockey_player
+"""
+        yaml_path = self.output_dir / "dataset.yaml"
+        with open(yaml_path, "w") as f:
+            f.write(yaml_content)
+
+        logger.info(
+            f"Full-frame dataset exported: {total_saved} images to {self.images_dir}"
         )
 
     def export_for_label_studio(
@@ -903,19 +1020,49 @@ def main():
         action="store_true",
         help="Don't include bounding box predictions in Label Studio export",
     )
+    parser.add_argument(
+        "--full-frames",
+        action="store_true",
+        help="Save full video frames as dataset (ignores player extraction)",
+    )
 
     args = parser.parse_args()
 
-    # Initialize extractor
+    # If full-frames is requested we don't need to load the model or use
+    # any player-based extraction options. Warn if user supplied conflicting
+    # options and instantiate extractor without loading the model.
+    if args.full_frames:
+        ignored_opts = []
+        if args.detection_conf != 0.5:
+            ignored_opts.append("--detection-conf")
+        if args.min_keypoints != 5:
+            ignored_opts.append("--min-keypoints")
+        if args.max_players_per_video != 100:
+            ignored_opts.append("--max-players-per-video")
+
+        if ignored_opts:
+            logger.warning(
+                "The following options are ignored when --full-frames is set: %s",
+                ", ".join(ignored_opts),
+            )
+
     extractor = HockeyPoseDatasetExtractor(
         output_dir=args.output_dir,
         model_path=args.model,
         detection_conf=args.detection_conf,
         min_keypoints=args.min_keypoints,
         videos_dir=args.videos_dir,
+        load_model=not args.full_frames,
     )
 
-    if args.export:
+    if args.full_frames:
+        # Save full frames from videos
+        extractor.process_all_videos_save_frames(
+            frame_interval=args.frame_interval,
+            max_frames_per_video=args.max_frames_per_video,
+            train_split=args.train_split,
+        )
+    elif args.export:
         # Export reviewed dataset
         extractor.export_yolo_dataset(train_split=args.train_split)
     elif args.export_label_studio:
@@ -1004,7 +1151,3 @@ def main():
         )
         logger.info("\n  # Export dataset after review")
         logger.info("  python -m vt1.finetuning.extract_dataset --export")
-
-
-if __name__ == "__main__":
-    main()
