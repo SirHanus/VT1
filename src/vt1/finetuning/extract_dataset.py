@@ -63,7 +63,7 @@ class HockeyPoseDatasetExtractor:
         self.detection_conf = detection_conf
         self.min_keypoints = min_keypoints
 
-        # Set videos directory
+        # Set videos directory - check parameter, then environment, then default
         if videos_dir:
             self.videos_dir = Path(videos_dir)
         else:
@@ -833,12 +833,12 @@ def main():
     parser.add_argument(
         "--video",
         type=str,
-        help="Path to video file or directory of videos (or use --process-all for videos_all/)",
+        help="Path to video file or directory of videos",
     )
     parser.add_argument(
-        "--process-all",
-        action="store_true",
-        help="Process all videos in videos_all/ directory",
+        "--videos-dir",
+        type=str,
+        help="Directory containing all videos to process (e.g., videos_all/)",
     )
     parser.add_argument(
         "--max-players-per-video",
@@ -912,6 +912,7 @@ def main():
         model_path=args.model,
         detection_conf=args.detection_conf,
         min_keypoints=args.min_keypoints,
+        videos_dir=args.videos_dir,
     )
 
     if args.export:
@@ -924,8 +925,8 @@ def main():
             max_frames_per_video=args.max_frames_per_video,
             include_predictions=not args.no_predictions,
         )
-    elif args.process_all:
-        # Process all videos in videos_all/
+    elif args.videos_dir:
+        # Process all videos in specified directory
         extractor.process_all_videos(
             players_per_video=args.max_players_per_video,
             frame_interval=args.frame_interval,
@@ -987,7 +988,7 @@ def main():
         logger.info("\nExamples:")
         logger.info("  # Process all videos in videos_all/ (100 players each)")
         logger.info(
-            "  python -m vt1.finetuning.extract_dataset --process-all --max-players-per-video 100"
+            "  python -m vt1.finetuning.extract_dataset --videos-dir videos_all --max-players-per-video 100"
         )
         logger.info("\n  # Process specific video")
         logger.info(

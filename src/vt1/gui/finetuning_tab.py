@@ -16,9 +16,80 @@ import sys
 from pathlib import Path
 from typing import Optional
 
+# Matplotlib imports for training metrics chart
+import matplotlib
 from PyQt6 import QtCore, QtGui, QtWidgets
 
+matplotlib.use("Qt5Agg")  # Use Qt5Agg backend for PyQt6 compatibility
+from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg
+from matplotlib.figure import Figure
+
 from vt1.config import settings
+
+
+class TrainingMetricsCanvas(FigureCanvasQTAgg):
+    """Matplotlib canvas for real-time training metrics visualization."""
+
+    def __init__(self, parent=None, width=5, height=4, dpi=100):
+        self.fig = Figure(figsize=(width, height), dpi=dpi)
+        self.axes = self.fig.add_subplot(111)
+        super().__init__(self.fig)
+        self.setParent(parent)
+
+        # Configure the plot
+        self.axes.set_xlabel("Epoch")
+        self.axes.set_ylabel("Loss")
+        self.axes.set_title("Training & Validation Metrics")
+        self.axes.grid(True, alpha=0.3)
+        self.axes.legend()
+
+        # Initialize empty lines
+        (self.train_box_line,) = self.axes.plot(
+            [], [], "b-", label="Train Box Loss", linewidth=2
+        )
+        (self.train_pose_line,) = self.axes.plot(
+            [], [], "r-", label="Train Pose Loss", linewidth=2
+        )
+        (self.val_box_line,) = self.axes.plot(
+            [], [], "b--", label="Val Box Loss", linewidth=2
+        )
+        (self.val_pose_line,) = self.axes.plot(
+            [], [], "r--", label="Val Pose Loss", linewidth=2
+        )
+
+        self.axes.legend()
+        self.fig.tight_layout()
+
+    def update_plot(self, epochs, train_box, train_pose, val_box, val_pose):
+        """Update the plot with new data."""
+        if not epochs:
+            return
+
+        # Update data
+        self.train_box_line.set_data(epochs, train_box)
+        self.train_pose_line.set_data(epochs, train_pose)
+
+        if val_box:
+            self.val_box_line.set_data(epochs[: len(val_box)], val_box)
+        if val_pose:
+            self.val_pose_line.set_data(epochs[: len(val_pose)], val_pose)
+
+        # Adjust axes limits
+        self.axes.relim()
+        self.axes.autoscale_view()
+
+        # Redraw
+        self.draw()
+
+    def clear_plot(self):
+        """Clear the plot data."""
+        self.train_box_line.set_data([], [])
+        self.train_pose_line.set_data([], [])
+        self.val_box_line.set_data([], [])
+        self.val_pose_line.set_data([], [])
+        self.axes.relim()
+        self.axes.autoscale_view()
+        self.draw()
 
 
 class FinetuningTab(QtWidgets.QWidget):
@@ -30,6 +101,13 @@ class FinetuningTab(QtWidgets.QWidget):
         self.export_proc: Optional[QtCore.QProcess] = None
         self.ls_proc: Optional[QtCore.QProcess] = None
         self.train_proc: Optional[QtCore.QProcess] = None
+
+        # Training metrics tracking
+        self.train_epochs = []
+        self.train_box_loss = []
+        self.train_pose_loss = []
+        self.val_box_loss = []
+        self.val_pose_loss = []
 
         # Build UI
         vlay = QtWidgets.QVBoxLayout(self)
@@ -75,7 +153,7 @@ class FinetuningTab(QtWidgets.QWidget):
             self._hrow(self.extract_output_ed, self.extract_output_btn),
         )
 
-        # Videos directory (for --process-all)
+        # Videos directory
         self.extract_videos_ed = QtWidgets.QLineEdit()
         self.extract_videos_btn = QtWidgets.QPushButton("Browse...")
         self.extract_videos_btn.clicked.connect(self._browse_videos_dir)
@@ -426,6 +504,11 @@ class FinetuningTab(QtWidgets.QWidget):
         self.train_status_lbl = QtWidgets.QLabel("Ready")
         status_lay.addWidget(self.train_status_lbl)
 
+        # Add training metrics chart
+        # self.train_metrics_canvas = TrainingMetricsCanvas(
+        #     self, width=8, height=3, dpi=100
+        # )
+        # status_lay.addWidget(self.train_metrics_canvas)
         self.train_log = QtWidgets.QPlainTextEdit()
         self.train_log.setReadOnly(True)
         self.train_log.setMaximumBlockCount(1000)
@@ -648,7 +731,8 @@ class FinetuningTab(QtWidgets.QWidget):
         args = [
             "-m",
             "vt1.finetuning.extract_dataset",
-            "--process-all",
+            "--videos-dir",
+            self.extract_videos_ed.text(),
             "--output-dir",
             self.extract_output_ed.text(),
             "--model",
@@ -662,9 +746,6 @@ class FinetuningTab(QtWidgets.QWidget):
             "--min-keypoints",
             str(self.extract_keypoints_sb.value()),
         ]
-
-        # Update videos_dir in extractor
-        os.environ["VT1_VIDEOS_DIR"] = self.extract_videos_ed.text()
 
         self._start_process(
             args,
@@ -784,6 +865,8 @@ class FinetuningTab(QtWidgets.QWidget):
             "-m",
             "vt1.finetuning.extract_dataset",
             "--export-label-studio",
+            "--videos-dir",
+            self.extract_videos_ed.text(),
             "--output-dir",
             self.extract_output_ed.text(),
             "--max-frames-per-video",
@@ -795,9 +878,6 @@ class FinetuningTab(QtWidgets.QWidget):
         # Add --no-predictions flag if checkbox is unchecked
         if not self.ls_predictions_cb.isChecked():
             args.append("--no-predictions")
-
-        # Update videos_dir in extractor
-        os.environ["VT1_VIDEOS_DIR"] = self.extract_videos_ed.text()
 
         self._start_process(
             args,
@@ -887,6 +967,14 @@ class FinetuningTab(QtWidgets.QWidget):
                 "Please format the dataset for YOLO first (Tab 1).",
             )
             return
+
+        # Clear previous training metrics
+        self.train_epochs.clear()
+        self.train_box_loss.clear()
+        self.train_pose_loss.clear()
+        self.val_box_loss.clear()
+        self.val_pose_loss.clear()
+        self.train_metrics_canvas.clear_plot()
 
         # Build command using custom training script
         model = self.train_model_cb.currentText()
@@ -1210,6 +1298,21 @@ class FinetuningTab(QtWidgets.QWidget):
                 f"Epoch {current}/{total} - box: {box_loss:.3f}, pose: {pose_loss:.3f}"
             )
 
+            # Update training metrics for chart
+            # if current not in self.train_epochs:
+            #     self.train_epochs.append(current)
+            #     self.train_box_loss.append(box_loss)
+            #     self.train_pose_loss.append(pose_loss)
+            #
+            #     # Update the chart
+            #     self.train_metrics_canvas.update_plot(
+            #         self.train_epochs,
+            #         self.train_box_loss,
+            #         self.train_pose_loss,
+            #         self.val_box_loss,
+            #         self.val_pose_loss,
+            #     )
+
         # Look for validation metrics
         val_match = re.search(
             r"val/box_loss:\s+([\d.]+).*?val/pose_loss:\s+([\d.]+)", text
@@ -1218,6 +1321,19 @@ class FinetuningTab(QtWidgets.QWidget):
             val_box = float(val_match.group(1))
             val_pose = float(val_match.group(2))
             status_lbl.setText(f"Validation - box: {val_box:.3f}, pose: {val_pose:.3f}")
+
+            # Update validation metrics for chart
+            # self.val_box_loss.append(val_box)
+            # self.val_pose_loss.append(val_pose)
+            #
+            # # Update the chart
+            # self.train_metrics_canvas.update_plot(
+            #     self.train_epochs,
+            #     self.train_box_loss,
+            #     self.train_pose_loss,
+            #     self.val_box_loss,
+            #     self.val_pose_loss,
+            # )
 
         # Look for "Training complete" or "Results saved"
         if "Training complete" in text or "Results saved to" in text:

@@ -18,6 +18,7 @@ dependencies = [
   "transformers",
   "joblib",
   "scikit-learn",
+  "matplotlib",
 ]
 
 [project.optional-dependencies]
