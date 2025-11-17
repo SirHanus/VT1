@@ -207,7 +207,7 @@ class FinetuningTab(QtWidgets.QWidget):
 
         # Full-frames mode (save full video frames as dataset)
         self.extract_full_frames_cb = QtWidgets.QCheckBox(
-            "Save Full Video Frames (disable detection/player extraction)"
+            "Save Full Video Frames for Label Studio"
         )
         self.extract_full_frames_cb.setToolTip(
             "When checked, saves full frames as the dataset and disables detection/player extraction options"
@@ -329,6 +329,7 @@ class FinetuningTab(QtWidgets.QWidget):
 
         # ========== Label Studio Export section ==========
         ls_group = QtWidgets.QGroupBox("Export for Label Studio (Under Development)")
+        ls_group.setVisible(False)
         ls_group.setEnabled(False)  # Disable entire section
         ls_vlay = QtWidgets.QVBoxLayout()
 

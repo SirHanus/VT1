@@ -318,7 +318,8 @@ class PipelineTab(QtWidgets.QWidget):
         self._handle_text_stream(text)
 
     def _on_finished(self, code: int, status: QtCore.QProcess.ExitStatus):
-        self._append_log(f"[GUI] Finished with code={code}, status={status}\n")
+
+        self._append_log(f"[GUI] Finished with code={code}, status={status}, folder={settings().pipeline_output_dir}\n")
         self._cleanup_proc()
         self.btn_run.setEnabled(True)
         self.btn_stop.setEnabled(False)
