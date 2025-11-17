@@ -489,7 +489,7 @@ class HockeyPoseDatasetExtractor:
 
         print("=" * 60)
         print(f"Found {len(video_files)} videos in {self.videos_dir}")
-        print("Saving full frames to dataset (no detection)")
+        print(f"Saving full frames to dataset (no detection) in {self.output_dir}")
         print("=" * 60)
 
         # Temp folder to collect frames before splitting
@@ -499,25 +499,42 @@ class HockeyPoseDatasetExtractor:
         saved_paths = []
         total_saved = 0
 
-        for video_file in video_files:
+        for video_idx, video_file in enumerate(video_files, 1):
             video_name = video_file.stem
+            print(f"[{video_idx}/{len(video_files)}] Processing: {video_name}")
             logger.info(f"Processing (full frames): {video_name}")
             frames = self.extract_frames(
                 str(video_file), frame_interval, max_frames=max_frames_per_video
             )
 
+            video_frame_count = 0
             for frame_num, frame in frames:
                 filename = f"{video_name}_frame_{frame_num:06d}.jpg"
                 path = tmp_dir / filename
-                cv2.imwrite(str(path), frame)
-                saved_paths.append(path)
-                total_saved += 1
+                success = cv2.imwrite(str(path), frame)
+
+                # Only add to list if write was successful
+                if success and path.exists():
+                    saved_paths.append(path)
+                    total_saved += 1
+                    video_frame_count += 1
+                else:
+                    logger.warning(f"Failed to write frame: {path}")
+
+                # Log progress every 50 frames
+                if video_frame_count % 50 == 0:
+                    print(f"  Saved {video_frame_count} frames from {video_name}...")
+
+            print(
+                f"  ✓ Saved {video_frame_count} frames from {video_name} (total: {total_saved})"
+            )
 
         if total_saved == 0:
             logger.error("No frames were extracted.")
             return
 
         # Shuffle and split
+        print(f"\nShuffling and splitting {len(saved_paths)} frames...")
         np.random.shuffle(saved_paths)
         split_idx = int(len(saved_paths) * train_split)
         train_list = saved_paths[:split_idx]
@@ -527,27 +544,55 @@ class HockeyPoseDatasetExtractor:
         (self.images_dir / "train").mkdir(parents=True, exist_ok=True)
         (self.images_dir / "val").mkdir(parents=True, exist_ok=True)
 
-        # Move files into train/val
+        # Move files into train/val with error handling
+        print(f"Moving {len(train_list)} frames to train...")
+        moved_train = 0
         for p in train_list:
+            if not p.exists():
+                logger.warning(f"File does not exist, skipping: {p}")
+                continue
             dest = self.images_dir / "train" / p.name
-            shutil.move(str(p), str(dest))
+            try:
+                shutil.move(str(p), str(dest))
+                moved_train += 1
+            except Exception as e:
+                logger.error(f"Failed to move {p} to {dest}: {e}")
 
+        print(f"Moving {len(val_list)} frames to val...")
+        moved_val = 0
         for p in val_list:
+            if not p.exists():
+                logger.warning(f"File does not exist, skipping: {p}")
+                continue
             dest = self.images_dir / "val" / p.name
-            shutil.move(str(p), str(dest))
+            try:
+                shutil.move(str(p), str(dest))
+                moved_val += 1
+            except Exception as e:
+                logger.error(f"Failed to move {p} to {dest}: {e}")
 
         # Remove tmp dir
         try:
+            # List remaining files for debugging
+            remaining = list(tmp_dir.glob("*"))
+            if remaining:
+                logger.warning(
+                    f"{len(remaining)} files remain in tmp_dir, attempting cleanup..."
+                )
+                for f in remaining:
+                    try:
+                        f.unlink()
+                    except Exception:
+                        pass
             tmp_dir.rmdir()
-        except Exception:
-            # If not empty or error, ignore
-            pass
+        except Exception as e:
+            logger.warning(f"Could not remove tmp directory: {e}")
 
         print("=" * 60)
         print("Full-frame dataset saved!")
-        print(f"  Total images: {total_saved}")
-        print(f"  Train: {len(train_list)}")
-        print(f"  Val: {len(val_list)}")
+        print(f"  Total images extracted: {total_saved}")
+        print(f"  Train: {moved_train}/{len(train_list)}")
+        print(f"  Val: {moved_val}/{len(val_list)}")
         print(f"  Image folders: {self.images_dir}")
         print("=" * 60)
 
@@ -940,7 +985,6 @@ flip_idx: [0, 2, 1, 4, 3, 6, 5, 8, 7, 10, 9, 12, 11, 14, 13, 16, 15]
 
 def main():
     """CLI entry point for dataset extraction."""
-    print("\nHockey Player Pose Dataset Extractor\n" + "=" * 40 + "\n")
     parser = argparse.ArgumentParser(
         description="Extract hockey player dataset with pose for YOLO fine-tuning"
     )
