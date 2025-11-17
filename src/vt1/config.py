@@ -101,6 +101,7 @@ def _repo_root() -> Path:
     frozen = getattr(sys, "frozen", False)
 
     if frozen:
+        return Path(sys.executable).parent
         # Running as exe: use AppData/Local/vt1 as root for all data
         import os
 
