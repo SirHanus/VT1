@@ -1181,7 +1181,9 @@ class FinetuningTab(QtWidgets.QWidget):
 
         proc.setProcessChannelMode(QtCore.QProcess.ProcessChannelMode.MergedChannels)
         proc.setWorkingDirectory(str(self._repo_root()))
-
+        print(
+            f"[GUI] Starting process: {cmd} {' '.join(self._quote(a) for a in launch_args)}"
+        )
         # Connect signals
         proc.readyReadStandardOutput.connect(
             lambda: self._on_process_output(proc, log, status_lbl, progress)

@@ -940,6 +940,7 @@ flip_idx: [0, 2, 1, 4, 3, 6, 5, 8, 7, 10, 9, 12, 11, 14, 13, 16, 15]
 
 def main():
     """CLI entry point for dataset extraction."""
+    print("\nHockey Player Pose Dataset Extractor\n" + "=" * 40 + "\n")
     parser = argparse.ArgumentParser(
         description="Extract hockey player dataset with pose for YOLO fine-tuning"
     )
@@ -1032,6 +1033,7 @@ def main():
     # any player-based extraction options. Warn if user supplied conflicting
     # options and instantiate extractor without loading the model.
     if args.full_frames:
+        print("NOTE: --full-frames is set, ignoring player extraction options.")
         ignored_opts = []
         if args.detection_conf != 0.5:
             ignored_opts.append("--detection-conf")
@@ -1057,6 +1059,7 @@ def main():
 
     if args.full_frames:
         # Save full frames from videos
+        print("Saving full frames from videos into dataset...")
         extractor.process_all_videos_save_frames(
             frame_interval=args.frame_interval,
             max_frames_per_video=args.max_frames_per_video,
@@ -1151,3 +1154,7 @@ def main():
         )
         logger.info("\n  # Export dataset after review")
         logger.info("  python -m vt1.finetuning.extract_dataset --export")
+
+
+if __name__ == "__main__":
+    main()
