@@ -62,14 +62,21 @@ echo [INFO] Building GUI executable (windowed mode)...
   --hidden-import vt1.gui.clustering_tab ^
   --hidden-import vt1.gui.help_tab ^
   --hidden-import vt1.gui.startup_dialog ^
+  --hidden-import vt1.gui.finetuning_tab ^
   --hidden-import vt1.team_clustering ^
   --hidden-import vt1.team_clustering.build_training_set ^
   --hidden-import vt1.team_clustering.cluster_umap_kmeans ^
   --hidden-import vt1.team_clustering.audit_training_set ^
   --hidden-import vt1.team_clustering.eval_clustering ^
+  --hidden-import vt1.pipeline ^
+  --hidden-import vt1.pipeline.__init__ ^
+  --hidden-import vt1.pipeline.sam_offline ^
+  --hidden-import vt1.pipeline.sam_general ^
+  --hidden-import vt1.pipeline.list_sources ^
+  --hidden-import vt1.finetuning ^
+  --hidden-import vt1.finetuning.__init__ ^
   --hidden-import vt1.finetuning.extract_dataset ^
   --hidden-import vt1.finetuning.train_yolo ^
-  --hidden-import vt1.finetuning.__init__ ^
   --add-data "%~dp0..\GUI.md;." ^
   --add-data "%~dp0..\README.md;." ^
   --add-data "%~dp0..\config_defaults.toml;." ^

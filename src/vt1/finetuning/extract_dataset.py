@@ -16,6 +16,7 @@ import argparse
 import json
 import logging
 import shutil
+import time
 from pathlib import Path
 from typing import Dict, List, Tuple
 
@@ -632,9 +633,13 @@ names:
         logger.info("=" * 60)
 
         # Create Label Studio export directory
-        ls_dir = self.output_dir / "label_studio"
-        ls_images_dir = ls_dir / "images"
+        # Save images directly in output_dir (which is labelstudio_exports/)
+        # This way they're accessible via the mounted volume
+        ls_images_dir = self.output_dir / "images"
         ls_images_dir.mkdir(parents=True, exist_ok=True)
+
+        timestamp = time.strftime("%Y%m%d_%H%M%S")
+        ls_json_filename = f"import_{timestamp}.json"
 
         # Find all video files
         if not self.videos_dir.exists():
@@ -671,14 +676,17 @@ names:
                 cv2.imwrite(str(img_path), frame)
 
                 # Create Label Studio task
+                # Path format: /data/local-files/?d=<relative-path-from-document-root>
+                # Document root is /label-studio, exports mounted at /label-studio/exports
+                # Images are in exports/images/, so path is exports/images/filename
                 task = {
                     "data": {
-                        "image": f"/data/local-files/?d=label_studio/images/{img_filename}"
+                        "image": f"/data/local-files/?d=exports/images/{img_filename}"
                     },
                     "meta": {
                         "video": video_name,
-                        "frame_number": frame_num,
-                        "frame_index": frame_idx,
+                        "frame_number": int(frame_num),
+                        "frame_index": int(frame_idx),
                     },
                 }
 
@@ -694,10 +702,11 @@ names:
                             x1, y1, x2, y2 = det["bbox"]
 
                             # Convert to Label Studio format (percentage)
-                            bbox_x = (x1 / w) * 100
-                            bbox_y = (y1 / h) * 100
-                            bbox_width = ((x2 - x1) / w) * 100
-                            bbox_height = ((y2 - y1) / h) * 100
+                            # Convert NumPy types to Python native types for JSON serialization
+                            bbox_x = float((x1 / w) * 100)
+                            bbox_y = float((y1 / h) * 100)
+                            bbox_width = float(((x2 - x1) / w) * 100)
+                            bbox_height = float(((y2 - y1) / h) * 100)
 
                             # Create prediction with bounding box
                             prediction = {
@@ -709,12 +718,12 @@ names:
                                     "width": bbox_width,
                                     "height": bbox_height,
                                     "rotation": 0,
-                                    "rectanglelabels": ["player"],
+                                    "rectanglelabels": ["Player"],
                                 },
                                 "from_name": "label",
                                 "to_name": "image",
-                                "original_width": w,
-                                "original_height": h,
+                                "original_width": int(w),
+                                "original_height": int(h),
                             }
 
                             # Add keypoints if available
@@ -727,8 +736,8 @@ names:
                                     if vis > 0.5:  # Only include visible keypoints
                                         keypoints_data.append(
                                             {
-                                                "x": (x / w) * 100,
-                                                "y": (y / h) * 100,
+                                                "x": float((x / w) * 100),
+                                                "y": float((y / h) * 100),
                                                 "keypointlabels": [f"kp_{kp_idx}"],
                                             }
                                         )
@@ -748,7 +757,7 @@ names:
             )
 
         # Save Label Studio import file
-        ls_json_path = ls_dir / "import.json"
+        ls_json_path = self.output_dir / ls_json_filename
         with open(ls_json_path, "w") as f:
             json.dump(ls_tasks, f, indent=2)
 
@@ -756,9 +765,9 @@ names:
         ls_config = """<View>
   <Image name="image" value="$image"/>
   <RectangleLabels name="label" toName="image">
-    <Label value="player" background="green"/>
-    <Label value="referee" background="blue"/>
-    <Label value="goalie" background="red"/>
+    <Label value="Player" background="green"/>
+    <Label value="Referee" background="blue"/>
+    <Label value="Goalie" background="red"/>
   </RectangleLabels>
   <KeyPointLabels name="kp-label" toName="image">
     <Label value="kp_0" background="#FFA39E"/>
@@ -781,7 +790,7 @@ names:
   </KeyPointLabels>
 </View>"""
 
-        config_path = ls_dir / "labeling_config.xml"
+        config_path = self.output_dir / "labeling_config.xml"
         with open(config_path, "w") as f:
             f.write(ls_config)
 
@@ -790,17 +799,25 @@ names:
 
 ## Files Generated:
 - `images/`: Full frame images ({total_frames_exported} images)
-- `import.json`: Label Studio import file with pre-annotations
+- `{ls_json_filename}`: Label Studio import file with pre-annotations
 - `labeling_config.xml`: Label Studio labeling interface configuration
 
 ## Import Instructions:
 
-1. Create a new project in Label Studio
-2. Go to Settings > Labeling Interface
-3. Copy content from `labeling_config.xml` into the configuration
-4. Go to Settings > Cloud Storage
-5. Add a local file storage pointing to: `{ls_images_dir.absolute()}`
-6. Import data from `import.json`
+### Method 1: Quick Import (Recommended)
+1. Open Label Studio at http://localhost:8080
+2. Create a new project (or open existing)
+3. Go to Settings > Import
+4. Click "Upload Files" and select `{ls_json_filename}`
+5. Images will be loaded automatically from the exports folder
+
+### Method 2: Manual Setup
+1. Go to Settings > Labeling Interface
+2. Copy content from `labeling_config.xml` into the configuration
+3. Save the configuration
+4. Import data from `{ls_json_filename}`
+
+Note: Images are in the mounted exports directory at `/label-studio/exports/images/` inside the container.
 
 ## Pre-annotations:
 - Bounding boxes are included for all detected players
@@ -811,18 +828,21 @@ names:
 ## Total frames exported: {total_frames_exported}
 """
 
-        readme_path = ls_dir / "README.md"
+        readme_path = self.output_dir / "README.md"
         with open(readme_path, "w") as f:
             f.write(readme_content)
 
-        print("=" * 60)
-        print("Label Studio export complete!")
-        print("=" * 60)
-        print(f"  Output directory: {ls_dir}")
-        print(f"  Frames exported: {total_frames_exported}")
-        print(f"  Import file: {ls_json_path}")
-        print(f"  Config file: {config_path}")
-        print(f"\nSee {readme_path} for import instructions")
+        logger.info("=" * 60)
+        logger.info("Label Studio export complete!")
+        logger.info("=" * 60)
+        logger.info(f"  Output directory: {self.output_dir}")
+        logger.info(f"  Frames exported: {total_frames_exported}")
+        logger.info(f"  Images directory: {ls_images_dir}")
+        logger.info(f"  Import file: {ls_json_path}")
+        logger.info(f"  Config file: {config_path}")
+        logger.info(f"\nSee {readme_path} for import instructions")
+
+        return ls_json_path
         print("=" * 60)
 
         logger.info(f"Label Studio export: {total_frames_exported} frames to {ls_dir}")

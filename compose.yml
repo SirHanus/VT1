@@ -6,7 +6,7 @@ services:
       - "8080:8080"
     environment:
       - LABEL_STUDIO_LOCAL_FILES_SERVING_ENABLED=true
-      - LABEL_STUDIO_LOCAL_FILES_DOCUMENT_ROOT=/label-studio/data
+      - LABEL_STUDIO_LOCAL_FILES_DOCUMENT_ROOT=/label-studio
       - LABEL_STUDIO_USERNAME=admin
       - LABEL_STUDIO_PASSWORD=admin
     volumes:

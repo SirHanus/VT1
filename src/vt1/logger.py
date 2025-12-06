@@ -139,11 +139,14 @@ def ensure_root_logger(log_dir: Optional[Path] = None, level: int = logging.INFO
         frozen = getattr(sys, "frozen", False)
 
         if frozen:
-            # Running as exe: use AppData/Local/vt1/logs
-            app_data = Path(
-                os.environ.get("LOCALAPPDATA", os.path.expanduser("~/.local"))
-            )
-            log_dir = app_data / "vt1" / "logs"
+            # Rnning as exe: use AppData/Local/vt1/logs
+            # app_data = Path(
+            #     os.environ.get("LOCALAPPDATA", os.path.expanduser("~/.local"))
+            # )
+            # log_dir = app_data / "vt1" / "logs"
+
+            app_data = Path(sys.executable).parent
+            log_dir = app_data / "logs"
         else:
             # Dev mode: logger.py is at repo_root/src/vt1/logger.py
             # parents[0] = src/vt1

@@ -144,6 +144,13 @@ if __name__ == "__main__":
         module_name = sys.argv[2]
         module_args = sys.argv[3:]
         _app_logger.info("Headless module run start: %s %s", module_name, module_args)
+
+        # When frozen, ensure the bundled package is in sys.path for runpy
+        if getattr(sys, "frozen", False):
+            meipass = getattr(sys, "_MEIPASS", None)
+            if meipass and meipass not in sys.path:
+                sys.path.insert(0, meipass)
+
         sys.argv = [module_name] + module_args
         try:
             runpy.run_module(module_name, run_name="__main__", alter_sys=True)
