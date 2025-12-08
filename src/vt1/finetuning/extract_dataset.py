@@ -741,7 +741,6 @@ names:
                                             "value": {
                                                 "x": float((x / w) * 100),
                                                 "y": float((y / h) * 100),
-                                                "width": 0.5,  # Small width for visibility
                                                 "keypointlabels": [f"kp_{kp_idx}"],
                                             },
                                             "from_name": "kp-label",
