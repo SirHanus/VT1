@@ -978,14 +978,21 @@ class FinetuningTab(QtWidgets.QWidget):
 
                 msg = (
                     "✅ Label Studio export complete!\n\n"
-                    f"Files saved to: labelstudio_exports/\n\n"
-                    "📋 To import into Label Studio:\n\n"
-                    "1. Open http://localhost:8080 (admin/admin)\n"
-                    "2. Create new project or open existing one\n"
-                    "3. Go to Settings → Import\n"
-                    "4. Upload the JSON file from labelstudio_exports/\n"
-                    "5. Start labeling!\n\n"
-                    "💡 Tip: The data is in /label-studio/exports inside the container."
+                    f"Files saved to:\n"
+                    f"  • labelstudio_data/images/ (full frames)\n"
+                    f"  • labelstudio_data/annotations/ (pre-annotations)\n"
+                    f"  • labelstudio_exports/ (combined JSON)\n\n"
+                    "📋 Method 1: Cloud Storage Sync (Recommended)\n\n"
+                    "1. Open http://localhost:9001 (admin/admin)\n"
+                    "2. Create/open project → Settings → Cloud Storage\n"
+                    "3. Add Source Storage:\n"
+                    "   • Path: /label-studio/data/images\n"
+                    "   • Enable 'Treat every object as task'\n"
+                    "   • Sync Storage\n"
+                    "4. Add Target Storage:\n"
+                    "   • Path: /label-studio/data/annotations\n"
+                    "   • Enable 'Treat every object as annotation'\n"
+                    "   • Sync Storage\n\n"
                 )
 
                 QtWidgets.QMessageBox.information(

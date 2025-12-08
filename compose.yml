@@ -3,22 +3,17 @@ services:
     image: heartexlabs/label-studio:latest
     container_name: vt1-labelstudio
     ports:
-      - "8080:8080"
+      - "9001:8080"
     environment:
       - LABEL_STUDIO_LOCAL_FILES_SERVING_ENABLED=true
-      - LABEL_STUDIO_LOCAL_FILES_DOCUMENT_ROOT=/label-studio
+      - LABEL_STUDIO_LOCAL_FILES_DOCUMENT_ROOT=/label-studio/data
+      - LABEL_STUDIO_LOCAL_FILES_IMPORT_DIR=/label-studio/data
       - LABEL_STUDIO_USERNAME=admin
       - LABEL_STUDIO_PASSWORD=admin
     volumes:
-      # Store Label Studio data (projects, annotations, users) in project
       - ./labelstudio_data:/label-studio/data
-      # Mount videos for labeling
-      - ./videos_all:/label-studio/videos:ro
-      # Mount hockey dataset for review/refinement
-      - ./hockey_pose_dataset:/label-studio/dataset:ro
-      # Export annotations to this directory
-      - ./labelstudio_exports:/label-studio/exports
     restart: unless-stopped
+    user: "0:0"
     command: label-studio start --host 0.0.0.0 --port 8080
 
   # Optional: PostgreSQL for production-grade Label Studio deployment
@@ -39,4 +34,3 @@ services:
 volumes:
   labelstudio_data:
   labelstudio_exports:
-

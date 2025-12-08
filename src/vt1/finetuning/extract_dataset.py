@@ -633,10 +633,14 @@ names:
         logger.info("=" * 60)
 
         # Create Label Studio export directory
-        # Save images directly in output_dir (which is labelstudio_exports/)
-        # This way they're accessible via the mounted volume
-        ls_images_dir = self.output_dir / "images"
+        # Save images in labelstudio_data/images/ where Label Studio can serve them
+        # Annotations go to labelstudio_data/annotations/ for Target Storage sync
+        cfg = settings()
+        ls_data_dir = cfg.repo_root / "labelstudio_data"
+        ls_images_dir = ls_data_dir / "images"
+        ls_annotations_dir = ls_data_dir / "annotations"
         ls_images_dir.mkdir(parents=True, exist_ok=True)
+        ls_annotations_dir.mkdir(parents=True, exist_ok=True)
 
         timestamp = time.strftime("%Y%m%d_%H%M%S")
         ls_json_filename = f"import_{timestamp}.json"
@@ -676,13 +680,10 @@ names:
                 cv2.imwrite(str(img_path), frame)
 
                 # Create Label Studio task
-                # Path format: /data/local-files/?d=<relative-path-from-document-root>
-                # Document root is /label-studio, exports mounted at /label-studio/exports
-                # Images are in exports/images/, so path is exports/images/filename
+                # Use Label Studio's local-files serving endpoint
+                # Images are in /label-studio/data/images/
                 task = {
-                    "data": {
-                        "image": f"/data/local-files/?d=exports/images/{img_filename}"
-                    },
+                    "data": {"image": f"/data/local-files/?d=images/{img_path.name}"},
                     "meta": {
                         "video": video_name,
                         "frame_number": int(frame_num),
@@ -709,8 +710,8 @@ names:
                             bbox_height = float(((y2 - y1) / h) * 100)
 
                             # Create prediction with bounding box
-                            prediction = {
-                                "id": f"pred_{det_idx}",
+                            bbox_prediction = {
+                                "id": f"bbox_{det_idx}",
                                 "type": "rectanglelabels",
                                 "value": {
                                     "x": bbox_x,
@@ -725,40 +726,67 @@ names:
                                 "original_width": int(w),
                                 "original_height": int(h),
                             }
+                            predictions.append(bbox_prediction)
 
-                            # Add keypoints if available
+                            # Add keypoints as separate result items if available
                             if det["keypoints"] is not None:
-                                keypoints_data = []
                                 kpts = det["keypoints"]
 
                                 for kp_idx, kpt in enumerate(kpts):
                                     x, y, vis = kpt
                                     if vis > 0.5:  # Only include visible keypoints
-                                        keypoints_data.append(
-                                            {
+                                        kp_prediction = {
+                                            "id": f"kp_{det_idx}_{kp_idx}",
+                                            "type": "keypointlabels",
+                                            "value": {
                                                 "x": float((x / w) * 100),
                                                 "y": float((y / h) * 100),
+                                                "width": 0.5,  # Small width for visibility
                                                 "keypointlabels": [f"kp_{kp_idx}"],
-                                            }
-                                        )
-
-                                if keypoints_data:
-                                    prediction["keypoints"] = keypoints_data
-
-                            predictions.append(prediction)
+                                            },
+                                            "from_name": "kp-label",
+                                            "to_name": "image",
+                                            "original_width": int(w),
+                                            "original_height": int(h),
+                                        }
+                                        predictions.append(kp_prediction)
 
                         task["predictions"] = [{"result": predictions}]
 
                 ls_tasks.append(task)
+
+                # Save individual annotation file for Target Storage sync
+                if include_predictions and "predictions" in task:
+                    ann_filename = img_filename.replace(".jpg", ".json")
+                    ann_path = ls_annotations_dir / ann_filename
+
+                    # Create annotation in Label Studio format
+                    annotation = {
+                        "data": task["data"],
+                        "annotations": [
+                            {
+                                "result": task["predictions"][0]["result"],
+                                "was_cancelled": False,
+                                "ground_truth": False,
+                            }
+                        ],
+                        "meta": task["meta"],
+                    }
+
+                    with open(ann_path, "w", encoding="utf-8") as f:
+                        json.dump(annotation, f, indent=2)
+
                 total_frames_exported += 1
 
             logger.info(
                 f"  Exported {len(frames)} frames from {video_name} (total: {total_frames_exported})"
             )
 
-        # Save Label Studio import file
-        ls_json_path = self.output_dir / ls_json_filename
-        with open(ls_json_path, "w") as f:
+        # Save combined Label Studio import file to labelstudio_exports directory
+        ls_export_dir = cfg.repo_root / "labelstudio_exports"
+        ls_export_dir.mkdir(parents=True, exist_ok=True)
+        ls_json_path = ls_export_dir / ls_json_filename
+        with open(ls_json_path, "w", encoding="utf-8") as f:
             json.dump(ls_tasks, f, indent=2)
 
         # Create Label Studio config template
@@ -790,62 +818,80 @@ names:
   </KeyPointLabels>
 </View>"""
 
-        config_path = self.output_dir / "labeling_config.xml"
-        with open(config_path, "w") as f:
+        config_path = ls_export_dir / "labeling_config.xml"
+        with open(config_path, "w", encoding="utf-8") as f:
             f.write(ls_config)
 
         # Create README
         readme_content = f"""# Label Studio Import
 
 ## Files Generated:
-- `images/`: Full frame images ({total_frames_exported} images)
-- `{ls_json_filename}`: Label Studio import file with pre-annotations
-- `labeling_config.xml`: Label Studio labeling interface configuration
+- `labelstudio_data/images/`: Full frame images ({total_frames_exported} images)
+- `labelstudio_data/annotations/`: Individual annotation JSON files (for Target Storage sync)
+- `labelstudio_exports/{ls_json_filename}`: Combined import file (for manual import)
+- `labelstudio_exports/labeling_config.xml`: Label Studio labeling interface configuration
 
 ## Import Instructions:
 
-### Method 1: Quick Import (Recommended)
-1. Open Label Studio at http://localhost:8080
-2. Create a new project (or open existing)
-3. Go to Settings > Import
-4. Click "Upload Files" and select `{ls_json_filename}`
-5. Images will be loaded automatically from the exports folder
+### Method 1: Cloud Storage Sync (Recommended - Auto-sync images + pre-annotations)
+1. Open Label Studio at http://localhost:9001 (admin/admin)
+2. Create a new project or open existing one
+3. Go to Settings → Labeling Interface
+   - Copy content from `labeling_config.xml` and paste it
+   - Save the configuration
+4. Go to Settings → Cloud Storage
+5. Add Source Storage:
+   - Storage Type: Local files
+   - Absolute local path: `/label-studio/data/images`
+   - File Filter Regex: `.*\\.jpg$`
+   - ✅ Enable "Treat every bucket object as a source for tasks"
+   - Click "Add Storage" then "Sync Storage"
+6. Add Target Storage (for pre-annotations):
+   - Storage Type: Local files
+   - Absolute local path: `/label-studio/data/annotations`
+   - File Filter Regex: `.*\\.json$`
+   - ✅ Enable "Treat every bucket object as annotation"
+   - Click "Add Storage" then "Sync Storage"
 
-### Method 2: Manual Setup
-1. Go to Settings > Labeling Interface
-2. Copy content from `labeling_config.xml` into the configuration
-3. Save the configuration
-4. Import data from `{ls_json_filename}`
+### Method 2: Manual JSON Import (Quick but one-time)
+1. Open Label Studio at http://localhost:9001 (admin/admin)
+2. Create a new project or open existing one
+3. Go to Settings → Labeling Interface
+   - Copy content from `labeling_config.xml` and paste it
+   - Save the configuration
+4. Click "Import" button on the project page
+5. Upload `{ls_json_filename}` from labelstudio_exports/
+6. Check "Treat uploaded file as a list of tasks"
 
-Note: Images are in the mounted exports directory at `/label-studio/exports/images/` inside the container.
+## Container Paths:
+- Images: `/label-studio/data/images/` → `d:/WORK/VT1/labelstudio_data/images/`
+- Annotations: `/label-studio/data/annotations/` → `d:/WORK/VT1/labelstudio_data/annotations/`
 
 ## Pre-annotations:
-- Bounding boxes are included for all detected players
-- Keypoints are included where visible
+- **Bounding boxes** (rectanglelabels) for all detected players
+- **Keypoints** (keypointlabels) as separate annotations for each visible keypoint (conf > 0.5)
+- Each keypoint is labeled as kp_0 through kp_16 (COCO format: nose, eyes, ears, shoulders, elbows, wrists, hips, knees, ankles)
 - Review and correct annotations as needed
 
 ## Videos processed: {len(video_files)}
 ## Total frames exported: {total_frames_exported}
 """
 
-        readme_path = self.output_dir / "README.md"
-        with open(readme_path, "w") as f:
+        readme_path = ls_export_dir / "README.md"
+        with open(readme_path, "w", encoding="utf-8") as f:
             f.write(readme_content)
 
         logger.info("=" * 60)
         logger.info("Label Studio export complete!")
         logger.info("=" * 60)
-        logger.info(f"  Output directory: {self.output_dir}")
         logger.info(f"  Frames exported: {total_frames_exported}")
         logger.info(f"  Images directory: {ls_images_dir}")
-        logger.info(f"  Import file: {ls_json_path}")
+        logger.info(f"  Annotations directory: {ls_annotations_dir}")
+        logger.info(f"  Combined import file: {ls_json_path}")
         logger.info(f"  Config file: {config_path}")
         logger.info(f"\nSee {readme_path} for import instructions")
 
         return ls_json_path
-        print("=" * 60)
-
-        logger.info(f"Label Studio export: {total_frames_exported} frames to {ls_dir}")
 
     def export_yolo_dataset(self, train_split: float = 0.8):
         """
