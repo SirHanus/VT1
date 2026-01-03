@@ -1,0 +1,23 @@
+{
+  "video_info": {
+    "path": "data_hockey.mp4",
+    "resolution": "1280x720",
+    "fps": 59.92667384999317,
+    "total_frames": 20,
+    "frames_processed": 20
+  },
+  "models": {
+    "YOLO-N-Pose": {
+      "load_time_s": 0.14702219981700182,
+      "mean_inference_time_ms": 9.878039918839931,
+      "std_inference_time_ms": 0.8043963928124376,
+      "mean_fps": 101.23465871936253,
+      "min_inference_time_ms": 8.612499572336674,
+      "max_inference_time_ms": 11.314500123262405,
+      "mean_detections": 0.7,
+      "std_detections": 0.45825756949558394,
+      "mean_confidence": 0.0,
+      "frames_processed": 10
+    }
+  }
+}
