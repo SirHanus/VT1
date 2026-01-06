@@ -460,9 +460,11 @@ def plot_results(results: Dict, output_dir: Path):
 
     pipeline_names = list(pipelines_data.keys())
 
-    # Create figure with subplots
+    # Create figure with subplots and better spacing
     fig = plt.figure(figsize=(16, 10))
-    gs = fig.add_gridspec(2, 2, hspace=0.3, wspace=0.3)
+    gs = fig.add_gridspec(
+        2, 2, hspace=0.4, wspace=0.35, left=0.08, right=0.95, top=0.82, bottom=0.08
+    )
 
     colors = plt.cm.Set2(np.linspace(0, 1, len(pipeline_names)))
 
@@ -593,13 +595,13 @@ def plot_results(results: Dict, output_dir: Path):
         f"(*SAM2 overhead simulated at ~18ms/detection)",
         fontsize=14,
         fontweight="bold",
-        y=0.99,
+        y=0.91,
     )
 
     # Save plot
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     plot_path = output_dir / f"pipeline_benchmark_{timestamp}.png"
-    plt.savefig(plot_path, dpi=300, bbox_inches="tight")
+    plt.savefig(plot_path, dpi=300, bbox_inches="tight", pad_inches=0.3)
     print(f"\n📊 Plot saved to: {plot_path}")
 
     plt.close()

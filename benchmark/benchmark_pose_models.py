@@ -453,9 +453,29 @@ def plot_results(results: Dict, output_dir: Path):
 
     model_names = list(models_data.keys())
 
-    # Create figure with subplots
+    # Extract short names (N, S, M, L, X) from full model names (YOLO-N-Pose, etc.)
+    short_names = []
+    for name in model_names:
+        # Extract model size from names like "YOLO-N-Pose" or "YOLO11-N-Pose"
+        if "-N-" in name or name.endswith("-N"):
+            short_names.append("N")
+        elif "-S-" in name or name.endswith("-S"):
+            short_names.append("S")
+        elif "-M-" in name or name.endswith("-M"):
+            short_names.append("M")
+        elif "-L-" in name or name.endswith("-L"):
+            short_names.append("L")
+        elif "-X-" in name or name.endswith("-X"):
+            short_names.append("X")
+        else:
+            # Fallback: use the full name if pattern not recognized
+            short_names.append(name)
+
+    # Create figure with subplots and better spacing
     fig = plt.figure(figsize=(16, 10))
-    gs = fig.add_gridspec(3, 2, hspace=0.3, wspace=0.3)
+    gs = fig.add_gridspec(
+        3, 2, hspace=0.4, wspace=0.35, left=0.08, right=0.95, top=0.85, bottom=0.08
+    )
 
     # 1. Inference Time Comparison
     ax1 = fig.add_subplot(gs[0, 0])
@@ -464,11 +484,11 @@ def plot_results(results: Dict, output_dir: Path):
     colors = plt.cm.Set3(np.linspace(0, 1, len(model_names)))
 
     bars = ax1.bar(
-        model_names, mean_times, yerr=std_times, capsize=5, color=colors, alpha=0.8
+        short_names, mean_times, yerr=std_times, capsize=5, color=colors, alpha=0.8
     )
     ax1.set_ylabel("Inference Time (ms)", fontsize=12, fontweight="bold")
+    ax1.set_xlabel("Model Size", fontsize=12, fontweight="bold")
     ax1.set_title("Mean Inference Time per Frame", fontsize=14, fontweight="bold")
-    ax1.tick_params(axis="x", rotation=45)
     ax1.grid(axis="y", alpha=0.3)
 
     # Add value labels on bars
@@ -486,12 +506,12 @@ def plot_results(results: Dict, output_dir: Path):
     # 2. FPS Comparison
     ax2 = fig.add_subplot(gs[0, 1])
     fps_values = [models_data[m]["mean_fps"] for m in model_names]
-    bars = ax2.bar(model_names, fps_values, color=colors, alpha=0.8)
+    bars = ax2.bar(short_names, fps_values, color=colors, alpha=0.8)
     ax2.set_ylabel("FPS", fontsize=12, fontweight="bold")
+    ax2.set_xlabel("Model Size", fontsize=12, fontweight="bold")
     ax2.set_title(
         "Processing Speed (Frames Per Second)", fontsize=14, fontweight="bold"
     )
-    ax2.tick_params(axis="x", rotation=45)
     ax2.grid(axis="y", alpha=0.3)
 
     # Add value labels
@@ -511,11 +531,11 @@ def plot_results(results: Dict, output_dir: Path):
     det_means = [models_data[m]["mean_detections"] for m in model_names]
     det_stds = [models_data[m]["std_detections"] for m in model_names]
     bars = ax3.bar(
-        model_names, det_means, yerr=det_stds, capsize=5, color=colors, alpha=0.8
+        short_names, det_means, yerr=det_stds, capsize=5, color=colors, alpha=0.8
     )
     ax3.set_ylabel("Number of Detections", fontsize=12, fontweight="bold")
+    ax3.set_xlabel("Model Size", fontsize=12, fontweight="bold")
     ax3.set_title("Average Detections per Frame", fontsize=14, fontweight="bold")
-    ax3.tick_params(axis="x", rotation=45)
     ax3.grid(axis="y", alpha=0.3)
 
     for bar, val in zip(bars, det_means):
@@ -532,11 +552,11 @@ def plot_results(results: Dict, output_dir: Path):
     # 4. Confidence Scores
     ax4 = fig.add_subplot(gs[1, 1])
     confidences = [models_data[m]["mean_confidence"] for m in model_names]
-    bars = ax4.bar(model_names, confidences, color=colors, alpha=0.8)
+    bars = ax4.bar(short_names, confidences, color=colors, alpha=0.8)
     ax4.set_ylabel("Confidence Score", fontsize=12, fontweight="bold")
+    ax4.set_xlabel("Model Size", fontsize=12, fontweight="bold")
     ax4.set_title("Average Detection Confidence", fontsize=14, fontweight="bold")
     ax4.set_ylim([0, 1.0])
-    ax4.tick_params(axis="x", rotation=45)
     ax4.grid(axis="y", alpha=0.3)
 
     for bar, val in zip(bars, confidences):
@@ -553,10 +573,10 @@ def plot_results(results: Dict, output_dir: Path):
     # 5. Model Load Time
     ax5 = fig.add_subplot(gs[2, 0])
     load_times = [models_data[m]["load_time_s"] for m in model_names]
-    bars = ax5.bar(model_names, load_times, color=colors, alpha=0.8)
+    bars = ax5.bar(short_names, load_times, color=colors, alpha=0.8)
     ax5.set_ylabel("Load Time (seconds)", fontsize=12, fontweight="bold")
+    ax5.set_xlabel("Model Size", fontsize=12, fontweight="bold")
     ax5.set_title("Model Load Time", fontsize=14, fontweight="bold")
-    ax5.tick_params(axis="x", rotation=45)
     ax5.grid(axis="y", alpha=0.3)
 
     for bar, val in zip(bars, load_times):
@@ -577,11 +597,11 @@ def plot_results(results: Dict, output_dir: Path):
 
     table_data = []
     headers = ["Model", "FPS", "Time (ms)", "Detections"]
-    for name in model_names:
+    for i, name in enumerate(model_names):
         m = models_data[name]
         table_data.append(
             [
-                name,
+                short_names[i],
                 f"{m['mean_fps']:.1f}",
                 f"{m['mean_inference_time_ms']:.1f}",
                 f"{m['mean_detections']:.1f}",
@@ -609,13 +629,13 @@ def plot_results(results: Dict, output_dir: Path):
         f'Frames: {video_info["frames_processed"]}',
         fontsize=16,
         fontweight="bold",
-        y=0.98,
+        y=0.93,
     )
 
     # Save plot
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     plot_path = output_dir / f"pose_benchmark_{timestamp}.png"
-    plt.savefig(plot_path, dpi=300, bbox_inches="tight")
+    plt.savefig(plot_path, dpi=300, bbox_inches="tight", pad_inches=0.3)
     print(f"\n📊 Plot saved to: {plot_path}")
 
     plt.close()
