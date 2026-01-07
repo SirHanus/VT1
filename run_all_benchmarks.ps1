@@ -2,11 +2,12 @@
 # Comprehensive benchmark runner with virtual environment support
 
 param(
-    [string]$Video = "data_hockey.mp4",
-    [int]$Frames = 500,
+    [string]$Video = "data_hockey_benchmark.mp4",
+    [int]$Frames = 800,
     [string]$Device = "auto",
     [string[]]$ModelSizes = @("n", "s", "m", "l", "x"),
     [string]$PipelineModelSize = "m",
+    [string]$Frameworks = "mediapipe,pytorch,yolo",
     [switch]$SkipModelComparison,
     [switch]$SkipPipeline,
     [switch]$SkipFrameworks,
@@ -115,7 +116,7 @@ if (-not $SkipFrameworks) {
     $frameworkOutputDir = "benchmark_results\frameworks\run_$timestamp"
 
     if (Test-Path $frameworkScript) {
-        $args = @($frameworkScript, "--video", $Video, "--frames", $frameworkFrames, "--device", $Device, "--yolo-size", $PipelineModelSize, "--output-dir", $frameworkOutputDir)
+        $args = @($frameworkScript, "--video", $Video, "--frames", $frameworkFrames, "--device", $Device, "--yolo-size", $PipelineModelSize, "--output-dir", $frameworkOutputDir, "--frameworks", $Frameworks)
         if ($ExportFrameworks) {
             $args += "--export-frames"
             $args += "--num-samples"

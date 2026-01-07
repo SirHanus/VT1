@@ -40,37 +40,37 @@ _FRAMEWORKS_AVAILABLE = {
     "yolo": False,
 }
 
+# MediaPipe detection - support both legacy (solutions) and new (tasks) API
+mp = None
+mp_use_legacy = False
+
 try:
-    # Try newer mediapipe structure first
-    from mediapipe.python.solutions import pose as mp_pose
-    from mediapipe.python.solutions import drawing_utils as mp_drawing
+    # First try legacy solutions API (MediaPipe < 0.10)
+    import mediapipe
 
-    _FRAMEWORKS_AVAILABLE["mediapipe"] = True
-    # Create mp object for compatibility
-    mp = type(
-        "MediaPipe",
-        (),
-        {
-            "solutions": type(
-                "Solutions",
-                (),
-                {
-                    "pose": mp_pose,
-                    "drawing_utils": mp_drawing,
-                    "POSE_CONNECTIONS": mp_pose.POSE_CONNECTIONS,
-                },
-            )()
-        },
-    )()
-except ImportError:
-    try:
-        # Fallback to older mediapipe structure
-        import mediapipe as mp
-
-        _FRAMEWORKS_AVAILABLE["mediapipe"] = hasattr(mp, "solutions")
-    except ImportError:
+    if hasattr(mediapipe, "solutions"):
+        # Legacy API available
+        mp = mediapipe
+        mp_use_legacy = True
+        try:
+            test_pose = mp.solutions.pose.Pose()
+            test_pose.close()
+            _FRAMEWORKS_AVAILABLE["mediapipe"] = True
+        except Exception as e:
+            print(f"MediaPipe legacy API initialization failed: {e}")
+            _FRAMEWORKS_AVAILABLE["mediapipe"] = False
+    else:
+        # New Tasks API (MediaPipe >= 0.10)
+        # For benchmarking, we'll skip MediaPipe 0.10+ as it requires model files
+        # and has a different API that needs significant code changes
+        print("⚠️  MediaPipe 0.10+ detected. Legacy solutions API not available.")
+        print("    MediaPipe benchmarking requires MediaPipe < 0.10 or code updates.")
         _FRAMEWORKS_AVAILABLE["mediapipe"] = False
         mp = None
+
+except ImportError:
+    _FRAMEWORKS_AVAILABLE["mediapipe"] = False
+    mp = None
 
 try:
     from openvino.runtime import Core
@@ -99,6 +99,14 @@ try:
     _FRAMEWORKS_AVAILABLE["yolo"] = True
 except ImportError:
     pass
+
+try:
+    import torchvision
+    from torchvision.models.detection import keypointrcnn_resnet50_fpn
+
+    _FRAMEWORKS_AVAILABLE["pytorch_keypoint"] = True
+except ImportError:
+    _FRAMEWORKS_AVAILABLE["pytorch_keypoint"] = False
 
 # PyTorch Keypoint baseline is part of torchvision
 _FRAMEWORKS_AVAILABLE["pytorch_keypoint"] = True
@@ -277,11 +285,40 @@ class PyTorchKeypointBenchmark(FrameworkBenchmark):
 
         elapsed = (time.perf_counter() - start) * 1000  # ms
 
-        # Count detections with confidence > 0.5
+        # Count detections with confidence > 0.5 and spatial filtering
         num_detections = 0
         if len(outputs) > 0 and "scores" in outputs[0]:
             scores = outputs[0]["scores"].cpu().numpy()
-            num_detections = int((scores > 0.5).sum())
+            boxes = outputs[0]["boxes"].cpu().numpy()
+
+            # Get frame dimensions
+            img_height, img_width = frame.shape[:2]
+
+            # Filter by confidence
+            conf_mask = scores > 0.5
+
+            # Spatial filtering: focus on central 80% width and lower 70% height
+            # This filters out crowd in upper/edge portions
+            spatial_mask = np.zeros(len(boxes), dtype=bool)
+            for i, box in enumerate(boxes):
+                if conf_mask[i]:
+                    # Calculate box center
+                    x_center = (box[0] + box[2]) / 2
+                    y_center = (box[1] + box[3]) / 2
+
+                    # Calculate box area to filter small detections
+                    area = (box[2] - box[0]) * (box[3] - box[1])
+
+                    # Keep detections in central area (0.1-0.9 width, below 0.3 height)
+                    # and with sufficient size (min 3000 pixels)
+                    if (
+                        img_width * 0.1 < x_center < img_width * 0.9
+                        and y_center > img_height * 0.3
+                        and area > 3000
+                    ):
+                        spatial_mask[i] = True
+
+            num_detections = int(spatial_mask.sum())
 
         return num_detections, elapsed
 
@@ -529,9 +566,26 @@ def export_sample_frames(
                         scores = outputs[0]["scores"].cpu().numpy()
                         keypoints = outputs[0]["keypoints"].cpu().numpy()
 
-                        # Draw detections with score > 0.5
+                        # Get frame dimensions for spatial filtering
+                        img_height, img_width = annotated.shape[:2]
+
+                        # Draw detections with score > 0.5 and spatial filtering
                         for i, (box, score) in enumerate(zip(boxes, scores)):
                             if score > 0.5:
+                                # Calculate box center and area for spatial filtering
+                                x_center = (box[0] + box[2]) / 2
+                                y_center = (box[1] + box[3]) / 2
+                                area = (box[2] - box[0]) * (box[3] - box[1])
+
+                                # Apply spatial filtering: focus on central 80% width and lower 70% height
+                                # Filter out crowd in upper/edge portions and small detections
+                                if not (
+                                    img_width * 0.1 < x_center < img_width * 0.9
+                                    and y_center > img_height * 0.3
+                                    and area > 3000
+                                ):
+                                    continue  # Skip this detection
+
                                 x1, y1, x2, y2 = box.astype(int)
                                 cv2.rectangle(
                                     annotated, (x1, y1), (x2, y2), colors["PyTorch"], 2
@@ -1091,6 +1145,12 @@ def main():
         "--yolo-size", type=str, default="m", help="YOLO model size (n, s, m, l, x)"
     )
     parser.add_argument(
+        "--frameworks",
+        type=str,
+        default="mediapipe,pytorch,yolo",
+        help="Comma-separated list of frameworks to benchmark (mediapipe,pytorch,yolo)",
+    )
+    parser.add_argument(
         "--export-frames",
         action="store_true",
         help="Export sample frames with pose annotations for visual inspection",
@@ -1104,6 +1164,29 @@ def main():
 
     args = parser.parse_args()
 
+    # Resolve video path - check multiple locations
+    video_path = Path(args.video)
+    if not video_path.exists():
+        # Try parent directory (when running from benchmark folder)
+        parent_video = Path("..") / args.video
+        if parent_video.exists():
+            video_path = parent_video
+        else:
+            # Try absolute path from script location
+            script_dir = Path(__file__).parent
+            root_video = script_dir.parent / args.video
+            if root_video.exists():
+                video_path = root_video
+            else:
+                print(f"❌ Error: Video file not found: {args.video}")
+                print(f"   Searched locations:")
+                print(f"   - {Path(args.video).absolute()}")
+                print(f"   - {parent_video.absolute()}")
+                print(f"   - {root_video.absolute()}")
+                return
+
+    args.video = str(video_path)
+
     print("=" * 70)
     print("🏒 FRAMEWORK COMPARISON BENCHMARK (October 3rd Evaluation)")
     print("=" * 70)
@@ -1111,24 +1194,50 @@ def main():
     print(f"Video: {args.video}")
     print(f"Max frames: {args.frames}")
 
-    # Setup frameworks to benchmark
+    # Parse requested frameworks
+    requested_frameworks = [fw.strip().lower() for fw in args.frameworks.split(",")]
+
+    # Check availability
+    print(f"\nFramework Availability:")
+    print(
+        f"  MediaPipe: {'✓' if _FRAMEWORKS_AVAILABLE['mediapipe'] else '✗ (not installed)'}"
+    )
+    print(
+        f"  PyTorch Keypoint R-CNN: {'✓' if torch.cuda.is_available() or args.device == 'cpu' else '✗'}"
+    )
+    print(f"  YOLO: {'✓' if _FRAMEWORKS_AVAILABLE['yolo'] else '✗ (not installed)'}")
+
+    # Setup frameworks to benchmark based on request and availability
     frameworks = []
 
     # MediaPipe
-    frameworks.append(MediaPipeBenchmark("cpu"))
+    if "mediapipe" in requested_frameworks:
+        if _FRAMEWORKS_AVAILABLE["mediapipe"]:
+            frameworks.append(MediaPipeBenchmark("cpu"))
+        else:
+            print(f"  ⚠️  MediaPipe requested but not available")
 
     # PyTorch Keypoint R-CNN
-    frameworks.append(PyTorchKeypointBenchmark(args.device))
+    if "pytorch" in requested_frameworks:
+        frameworks.append(PyTorchKeypointBenchmark(args.device))
 
     # YOLO (selected solution)
-    frameworks.append(YOLOBenchmark(args.yolo_size, args.device))
+    if "yolo" in requested_frameworks:
+        if _FRAMEWORKS_AVAILABLE["yolo"]:
+            frameworks.append(YOLOBenchmark(args.yolo_size, args.device))
+        else:
+            print(f"  ⚠️  YOLO requested but not available")
 
     # Placeholders for frameworks that need model files
     # frameworks.append(OpenVINOBenchmark(args.device))
     # frameworks.append(TRTPoseBenchmark(args.device))
     # frameworks.append(MMPoseBenchmark(args.device))
 
-    print(f"\nFrameworks available for testing:")
+    if not frameworks:
+        print("\n❌ Error: No frameworks available for benchmarking!")
+        return
+
+    print(f"\nFrameworks to benchmark:")
     for fw in frameworks:
         status = "✅" if fw.available else "⚠️"
         print(f"  {status} {fw.name}")
