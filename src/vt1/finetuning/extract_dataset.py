@@ -618,15 +618,17 @@ names:
         self,
         frame_interval: int = 30,
         max_frames_per_video: int = 50,
-        include_predictions: bool = True,
     ):
         """
-        Export full frames with detections for Label Studio import.
+        Export full frames for Label Studio import.
 
         Args:
             frame_interval: Extract every Nth frame
             max_frames_per_video: Maximum frames to export per video
-            include_predictions: Include bounding boxes and keypoints as pre-annotations
+
+        Note:
+            For automatic pre-annotations, use the YOLO ML backend in compose.yml
+            instead of including predictions in the export.
         """
         logger.info("=" * 60)
         logger.info("Exporting frames for Label Studio")
@@ -634,13 +636,10 @@ names:
 
         # Create Label Studio export directory
         # Save images in labelstudio_data/images/ where Label Studio can serve them
-        # Annotations go to labelstudio_data/annotations/ for Target Storage sync
         cfg = settings()
         ls_data_dir = cfg.repo_root / "labelstudio_data"
         ls_images_dir = ls_data_dir / "images"
-        ls_annotations_dir = ls_data_dir / "annotations"
         ls_images_dir.mkdir(parents=True, exist_ok=True)
-        ls_annotations_dir.mkdir(parents=True, exist_ok=True)
 
         timestamp = time.strftime("%Y%m%d_%H%M%S")
         ls_json_filename = f"import_{timestamp}.json"
@@ -691,89 +690,7 @@ names:
                     },
                 }
 
-                # Add predictions if requested
-                if include_predictions:
-                    detections = self.detect_players_with_pose(frame)
-
-                    if detections:
-                        h, w = frame.shape[:2]
-                        predictions = []
-
-                        for det_idx, det in enumerate(detections):
-                            x1, y1, x2, y2 = det["bbox"]
-
-                            # Convert to Label Studio format (percentage)
-                            # Convert NumPy types to Python native types for JSON serialization
-                            bbox_x = float((x1 / w) * 100)
-                            bbox_y = float((y1 / h) * 100)
-                            bbox_width = float(((x2 - x1) / w) * 100)
-                            bbox_height = float(((y2 - y1) / h) * 100)
-
-                            # Create prediction with bounding box
-                            bbox_prediction = {
-                                "id": f"bbox_{det_idx}",
-                                "type": "rectanglelabels",
-                                "value": {
-                                    "x": bbox_x,
-                                    "y": bbox_y,
-                                    "width": bbox_width,
-                                    "height": bbox_height,
-                                    "rotation": 0,
-                                    "rectanglelabels": ["Player"],
-                                },
-                                "from_name": "label",
-                                "to_name": "image",
-                                "original_width": int(w),
-                                "original_height": int(h),
-                            }
-                            predictions.append(bbox_prediction)
-
-                            # Add keypoints as separate result items if available
-                            if det["keypoints"] is not None:
-                                kpts = det["keypoints"]
-
-                                for kp_idx, kpt in enumerate(kpts):
-                                    x, y, vis = kpt
-                                    if vis > 0.5:  # Only include visible keypoints
-                                        kp_prediction = {
-                                            "id": f"kp_{det_idx}_{kp_idx}",
-                                            "type": "keypointlabels",
-                                            "value": {
-                                                "x": float((x / w) * 100),
-                                                "y": float((y / h) * 100),
-                                                "keypointlabels": [f"kp_{kp_idx}"],
-                                            },
-                                            "from_name": "kp-label",
-                                            "to_name": "image",
-                                            "original_width": int(w),
-                                            "original_height": int(h),
-                                        }
-                                        predictions.append(kp_prediction)
-
-                        task["predictions"] = [{"result": predictions}]
-
                 ls_tasks.append(task)
-
-                # Save individual annotation file for Target Storage sync
-                if include_predictions and "predictions" in task:
-                    ann_filename = img_filename.replace(".jpg", ".json")
-                    ann_path = ls_annotations_dir / ann_filename
-
-                    # Create annotation in Label Studio format
-                    annotation = {
-                        "data": task["data"],
-                        "annotations": [
-                            {
-                                "result": task["predictions"][0]["result"],
-                                "was_cancelled": False,
-                                "ground_truth": False,
-                            }
-                        ],
-                        "meta": task["meta"],
-                    }
-
-                    with open(ann_path, "w", encoding="utf-8") as f:
-                        json.dump(annotation, f, indent=2)
 
                 total_frames_exported += 1
 
@@ -826,13 +743,12 @@ names:
 
 ## Files Generated:
 - `labelstudio_data/images/`: Full frame images ({total_frames_exported} images)
-- `labelstudio_data/annotations/`: Individual annotation JSON files (for Target Storage sync)
-- `labelstudio_exports/{ls_json_filename}`: Combined import file (for manual import)
+- `labelstudio_exports/{ls_json_filename}`: Combined import file
 - `labelstudio_exports/labeling_config.xml`: Label Studio labeling interface configuration
 
 ## Import Instructions:
 
-### Method 1: Cloud Storage Sync (Recommended - Auto-sync images + pre-annotations)
+### Method 1: Cloud Storage Sync (Recommended)
 1. Open Label Studio at http://localhost:9001 (admin/admin)
 2. Create a new project or open existing one
 3. Go to Settings → Labeling Interface
@@ -845,12 +761,6 @@ names:
    - File Filter Regex: `.*\\.jpg$`
    - ✅ Enable "Treat every bucket object as a source for tasks"
    - Click "Add Storage" then "Sync Storage"
-6. Add Target Storage (for pre-annotations):
-   - Storage Type: Local files
-   - Absolute local path: `/label-studio/data/annotations`
-   - File Filter Regex: `.*\\.json$`
-   - ✅ Enable "Treat every bucket object as annotation"
-   - Click "Add Storage" then "Sync Storage"
 
 ### Method 2: Manual JSON Import (Quick but one-time)
 1. Open Label Studio at http://localhost:9001 (admin/admin)
@@ -862,15 +772,18 @@ names:
 5. Upload `{ls_json_filename}` from labelstudio_exports/
 6. Check "Treat uploaded file as a list of tasks"
 
+## Automatic Pre-annotations:
+For automatic pre-annotations with YOLO model:
+1. Start services: `docker compose up -d`
+2. In Label Studio project, go to Settings → Machine Learning
+3. Add Model:
+   - URL: `http://yolo-backend:9090`
+   - Click "Validate and Save"
+   - Enable "Retrieve predictions when loading a task automatically"
+4. Import your images and predictions will be generated automatically!
+
 ## Container Paths:
 - Images: `/label-studio/data/images/` → `d:/WORK/VT1/labelstudio_data/images/`
-- Annotations: `/label-studio/data/annotations/` → `d:/WORK/VT1/labelstudio_data/annotations/`
-
-## Pre-annotations:
-- **Bounding boxes** (rectanglelabels) for all detected players
-- **Keypoints** (keypointlabels) as separate annotations for each visible keypoint (conf > 0.5)
-- Each keypoint is labeled as kp_0 through kp_16 (COCO format: nose, eyes, ears, shoulders, elbows, wrists, hips, knees, ankles)
-- Review and correct annotations as needed
 
 ## Videos processed: {len(video_files)}
 ## Total frames exported: {total_frames_exported}
@@ -885,10 +798,12 @@ names:
         logger.info("=" * 60)
         logger.info(f"  Frames exported: {total_frames_exported}")
         logger.info(f"  Images directory: {ls_images_dir}")
-        logger.info(f"  Annotations directory: {ls_annotations_dir}")
         logger.info(f"  Combined import file: {ls_json_path}")
         logger.info(f"  Config file: {config_path}")
         logger.info(f"\nSee {readme_path} for import instructions")
+        logger.info(
+            "\n💡 For automatic pre-annotations: Use YOLO ML backend in compose.yml"
+        )
 
         return ls_json_path
 
@@ -1117,18 +1032,13 @@ def main():
     parser.add_argument(
         "--export-label-studio",
         action="store_true",
-        help="Export full frames with pre-annotations for Label Studio",
+        help="Export full frames for Label Studio (use ML backend for pre-annotations)",
     )
     parser.add_argument(
         "--max-frames-per-video",
         type=int,
         default=50,
         help="Maximum frames to export per video for Label Studio (default: 50)",
-    )
-    parser.add_argument(
-        "--no-predictions",
-        action="store_true",
-        help="Don't include bounding box predictions in Label Studio export",
     )
     parser.add_argument(
         "--full-frames",
@@ -1179,10 +1089,10 @@ def main():
         extractor.export_yolo_dataset(train_split=args.train_split)
     elif args.export_label_studio:
         # Export full frames for Label Studio
+        # Note: Pre-annotations are handled by the YOLO ML backend in compose.yml
         extractor.export_for_label_studio(
             frame_interval=args.frame_interval,
             max_frames_per_video=args.max_frames_per_video,
-            include_predictions=not args.no_predictions,
         )
     elif args.videos_dir:
         # Process all videos in specified directory
@@ -1253,14 +1163,12 @@ def main():
         logger.info(
             "  python -m vt1.finetuning.extract_dataset --video path/to/video.mp4 --max-players-per-video 50"
         )
-        logger.info("\n  # Export full frames for Label Studio (with bounding boxes)")
+        logger.info("\n  # Export full frames for Label Studio")
         logger.info(
             "  python -m vt1.finetuning.extract_dataset --export-label-studio --max-frames-per-video 50"
         )
-        logger.info("\n  # Export full frames for Label Studio (without predictions)")
-        logger.info(
-            "  python -m vt1.finetuning.extract_dataset --export-label-studio --no-predictions"
-        )
+        logger.info("\n  # For pre-annotations: Use YOLO ML backend in compose.yml")
+        logger.info("  # (Add ML backend in Label Studio Settings → Machine Learning)")
         logger.info("\n  # Export dataset after review")
         logger.info("  python -m vt1.finetuning.extract_dataset --export")
 

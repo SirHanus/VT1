@@ -15,6 +15,23 @@ services:
     restart: unless-stopped
     user: "0:0"
     command: label-studio start --host 0.0.0.0 --port 8080
+    depends_on:
+      - yolo-backend
+
+  yolo-backend:
+    build: ./ml_backend
+    container_name: vt1-yolo-backend
+    ports:
+      - "9090:9090"
+    environment:
+      - YOLO_MODEL=yolo11x-pose.pt
+      - CONF_THRESHOLD=0.25
+      - LOG_LEVEL=INFO
+    volumes:
+      - ./labelstudio_data:/label-studio/data:ro
+      - ./models:/models:ro
+      - .:/workspace:ro
+    restart: unless-stopped
 
   # Optional: PostgreSQL for production-grade Label Studio deployment
   # Uncomment if you want better performance and multi-user support

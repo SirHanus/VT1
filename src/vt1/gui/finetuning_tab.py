@@ -313,19 +313,26 @@ class FinetuningTab(QtWidgets.QWidget):
             "Max Frames/Video:", self.ls_max_frames_sb
         )
 
-        # Include predictions checkbox (Label Studio only)
-        self.ls_predictions_cb = QtWidgets.QCheckBox(
-            "Include Bounding Boxes & Keypoints"
-        )
-        self.ls_predictions_cb.setChecked(True)
-        self.ls_predictions_cb.setToolTip(
-            "Include detected bounding boxes and keypoints as pre-annotations"
-        )
-        self.ls_predictions_row = export_form.addRow(
-            "Pre-annotations:", self.ls_predictions_cb
-        )
-
         export_vlay.addLayout(export_form)
+
+        # Info about pre-annotations via ML backend
+        self.ls_preannotation_info = QtWidgets.QLabel(
+            "💡 For automatic pre-annotations: Use the YOLO ML backend in compose.yml\n"
+            "   Start with 'docker compose up -d' and add the backend in Label Studio Settings → Machine Learning"
+        )
+        self.ls_preannotation_info.setWordWrap(True)
+        self.ls_preannotation_info.setStyleSheet(
+            """
+            QLabel {
+                padding: 8px;
+                background-color: #d1ecf1;   /* info background */
+                border-radius: 4px;
+                color: #0c5460;              /* info text */
+                font-size: 9pt;
+            }
+        """
+        )
+        export_vlay.addWidget(self.ls_preannotation_info)
 
         # Under development warning (Label Studio only)
         self.ls_warning_label = QtWidgets.QLabel(
@@ -850,13 +857,8 @@ class FinetuningTab(QtWidgets.QWidget):
             if label_widget:
                 label_widget.setVisible(is_label_studio)
 
-        self.ls_predictions_cb.setVisible(is_label_studio)
-        if hasattr(self, "export_form_layout"):
-            label_widget = self.export_form_layout.labelForField(self.ls_predictions_cb)
-            if label_widget:
-                label_widget.setVisible(is_label_studio)
-
-        # Show/hide warning label
+        # Show/hide pre-annotation info and warning label
+        self.ls_preannotation_info.setVisible(is_label_studio)
         self.ls_warning_label.setVisible(is_label_studio)
 
         # Update button text
@@ -923,11 +925,8 @@ class FinetuningTab(QtWidgets.QWidget):
             str(self.ls_max_frames_sb.value()),
             "--frame-interval",
             str(self.extract_interval_sb.value()),
+            "--no-predictions",  # Don't include predictions, use ML backend instead
         ]
-
-        # Add --no-predictions flag if checkbox is unchecked
-        if not self.ls_predictions_cb.isChecked():
-            args.append("--no-predictions")
 
         self._start_process(
             args,
@@ -980,8 +979,10 @@ class FinetuningTab(QtWidgets.QWidget):
                     "✅ Label Studio export complete!\n\n"
                     f"Files saved to:\n"
                     f"  • labelstudio_data/images/ (full frames)\n"
-                    f"  • labelstudio_data/annotations/ (pre-annotations)\n"
                     f"  • labelstudio_exports/ (combined JSON)\n\n"
+                    "💡 For automatic pre-annotations:\n"
+                    "   Use the YOLO ML backend in compose.yml\n"
+                    "   (See Settings → Machine Learning in Label Studio)\n\n"
                     "📋 Method 1: Cloud Storage Sync (Recommended)\n\n"
                     "1. Open http://localhost:9001 (admin/admin)\n"
                     "2. Create/open project → Settings → Cloud Storage\n"
@@ -989,10 +990,9 @@ class FinetuningTab(QtWidgets.QWidget):
                     "   • Path: /label-studio/data/images\n"
                     "   • Enable 'Treat every object as task'\n"
                     "   • Sync Storage\n"
-                    "4. Add Target Storage:\n"
-                    "   • Path: /label-studio/data/annotations\n"
-                    "   • Enable 'Treat every object as annotation'\n"
-                    "   • Sync Storage\n\n"
+                    "4. Add ML Backend (Settings → Machine Learning):\n"
+                    "   • URL: http://yolo-backend:9090\n"
+                    "   • Enable auto-predictions\n\n"
                 )
 
                 QtWidgets.QMessageBox.information(
