@@ -472,9 +472,9 @@ def plot_results(results: Dict, output_dir: Path):
             short_names.append(name)
 
     # Create figure with subplots and better spacing
-    fig = plt.figure(figsize=(16, 10))
+    fig = plt.figure(figsize=(16, 8))
     gs = fig.add_gridspec(
-        3, 2, hspace=0.4, wspace=0.35, left=0.08, right=0.95, top=0.85, bottom=0.08
+        2, 2, hspace=0.35, wspace=0.35, left=0.08, right=0.95, top=0.88, bottom=0.08
     )
 
     # 1. Inference Time Comparison
@@ -570,55 +570,6 @@ def plot_results(results: Dict, output_dir: Path):
             fontsize=9,
         )
 
-    # 5. Model Load Time
-    ax5 = fig.add_subplot(gs[2, 0])
-    load_times = [models_data[m]["load_time_s"] for m in model_names]
-    bars = ax5.bar(short_names, load_times, color=colors, alpha=0.8)
-    ax5.set_ylabel("Load Time (seconds)", fontsize=12, fontweight="bold")
-    ax5.set_xlabel("Model Size", fontsize=12, fontweight="bold")
-    ax5.set_title("Model Load Time", fontsize=14, fontweight="bold")
-    ax5.grid(axis="y", alpha=0.3)
-
-    for bar, val in zip(bars, load_times):
-        height = bar.get_height()
-        ax5.text(
-            bar.get_x() + bar.get_width() / 2.0,
-            height,
-            f"{val:.2f}s",
-            ha="center",
-            va="bottom",
-            fontsize=9,
-        )
-
-    # 6. Summary table
-    ax6 = fig.add_subplot(gs[2, 1])
-    ax6.axis("tight")
-    ax6.axis("off")
-
-    table_data = []
-    headers = ["Model", "FPS", "Time (ms)", "Detections"]
-    for i, name in enumerate(model_names):
-        m = models_data[name]
-        table_data.append(
-            [
-                short_names[i],
-                f"{m['mean_fps']:.1f}",
-                f"{m['mean_inference_time_ms']:.1f}",
-                f"{m['mean_detections']:.1f}",
-            ]
-        )
-
-    table = ax6.table(
-        cellText=table_data,
-        colLabels=headers,
-        cellLoc="center",
-        loc="center",
-        colColours=["lightgray"] * len(headers),
-    )
-    table.auto_set_font_size(False)
-    table.set_fontsize(10)
-    table.scale(1, 2)
-
     # Overall title
     video_info = results["video_info"]
     hw_info = get_hardware_info()
@@ -629,7 +580,7 @@ def plot_results(results: Dict, output_dir: Path):
         f'Frames: {video_info["frames_processed"]}',
         fontsize=16,
         fontweight="bold",
-        y=0.93,
+        y=0.98,
     )
 
     # Save plot

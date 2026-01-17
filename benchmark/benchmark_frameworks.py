@@ -875,9 +875,9 @@ def plot_results(results: Dict, output_dir: Path):
     framework_names = list(frameworks_data.keys())
 
     # Create figure with subplots and better spacing
-    fig = plt.figure(figsize=(18, 12))
+    fig = plt.figure(figsize=(16, 12))
     gs = fig.add_gridspec(
-        3, 3, hspace=0.45, wspace=0.4, left=0.08, right=0.95, top=0.82, bottom=0.08
+        3, 2, hspace=0.45, wspace=0.4, left=0.08, right=0.95, top=0.88, bottom=0.08
     )
 
     colors = plt.cm.Set3(np.linspace(0, 1, len(framework_names)))
@@ -937,7 +937,7 @@ def plot_results(results: Dict, output_dir: Path):
         )
 
     # 3. Detection Count
-    ax3 = fig.add_subplot(gs[0, 2])
+    ax3 = fig.add_subplot(gs[1, 0])
     det_means = [frameworks_data[f]["mean_detections"] for f in framework_names]
     det_stds = [frameworks_data[f]["std_detections"] for f in framework_names]
 
@@ -967,7 +967,7 @@ def plot_results(results: Dict, output_dir: Path):
         )
 
     # 4. Model Size
-    ax4 = fig.add_subplot(gs[1, 0])
+    ax4 = fig.add_subplot(gs[1, 1])
     model_sizes = [frameworks_data[f]["model_size_mb"] for f in framework_names]
 
     bars = ax4.bar(range(len(framework_names)), model_sizes, color=colors, alpha=0.8)
@@ -987,31 +987,8 @@ def plot_results(results: Dict, output_dir: Path):
             va="bottom",
             fontsize=9,
         )
-
-    # 5. Load Time
-    ax5 = fig.add_subplot(gs[1, 1])
-    load_times = [frameworks_data[f]["load_time_s"] for f in framework_names]
-
-    bars = ax5.bar(range(len(framework_names)), load_times, color=colors, alpha=0.8)
-    ax5.set_xticks(range(len(framework_names)))
-    ax5.set_xticklabels(framework_names, rotation=45, ha="right")
-    ax5.set_ylabel("Load Time (seconds)", fontsize=11, fontweight="bold")
-    ax5.set_title("Model Load Time", fontsize=13, fontweight="bold")
-    ax5.grid(axis="y", alpha=0.3)
-
-    for bar, val in zip(bars, load_times):
-        height = bar.get_height()
-        ax5.text(
-            bar.get_x() + bar.get_width() / 2.0,
-            height,
-            f"{val:.2f}s",
-            ha="center",
-            va="bottom",
-            fontsize=9,
-        )
-
-    # 6. Speed vs Accuracy scatter
-    ax6 = fig.add_subplot(gs[1, 2])
+    # 5. Speed vs Accuracy scatter
+    ax5 = fig.add_subplot(gs[2, 0])
     scatter_fps = []
     scatter_det = []
     scatter_names = []
@@ -1022,7 +999,7 @@ def plot_results(results: Dict, output_dir: Path):
         scatter_det.append(f["mean_detections"])
         scatter_names.append(name.split()[0])  # Short name
 
-    ax6.scatter(
+    ax5.scatter(
         scatter_fps,
         scatter_det,
         s=200,
@@ -1033,7 +1010,7 @@ def plot_results(results: Dict, output_dir: Path):
     )
 
     for i, name in enumerate(scatter_names):
-        ax6.annotate(
+        ax5.annotate(
             name,
             (scatter_fps[i], scatter_det[i]),
             xytext=(5, 5),
@@ -1041,60 +1018,27 @@ def plot_results(results: Dict, output_dir: Path):
             fontsize=9,
         )
 
-    ax6.set_xlabel("FPS", fontsize=11, fontweight="bold")
-    ax6.set_ylabel("Detections/Frame", fontsize=11, fontweight="bold")
-    ax6.set_title("Speed vs Detection Trade-off", fontsize=13, fontweight="bold")
-    ax6.grid(alpha=0.3)
+    ax5.set_xlabel("FPS", fontsize=11, fontweight="bold")
+    ax5.set_ylabel("Detections/Frame", fontsize=11, fontweight="bold")
+    ax5.set_title("Speed vs Detection Trade-off", fontsize=13, fontweight="bold")
+    ax5.grid(alpha=0.3)
 
-    # 7. Setup Complexity (qualitative)
-    ax7 = fig.add_subplot(gs[2, 0])
+    # 6. Setup Complexity (qualitative)
+    ax6 = fig.add_subplot(gs[2, 1])
     complexities = [frameworks_data[f]["setup_complexity"] for f in framework_names]
     complexity_map = {"Low": 1, "Medium": 2, "High": 3}
     complexity_values = [complexity_map.get(c, 2) for c in complexities]
 
-    bars = ax7.barh(
+    bars = ax6.barh(
         range(len(framework_names)), complexity_values, color=colors, alpha=0.8
     )
-    ax7.set_yticks(range(len(framework_names)))
-    ax7.set_yticklabels(framework_names)
-    ax7.set_xlabel("Complexity", fontsize=11, fontweight="bold")
-    ax7.set_title("Setup Complexity", fontsize=13, fontweight="bold")
-    ax7.set_xticks([1, 2, 3])
-    ax7.set_xticklabels(["Low", "Medium", "High"])
-    ax7.grid(axis="x", alpha=0.3)
-
-    # 8. Summary Table
-    ax8 = fig.add_subplot(gs[2, 1:])
-    ax8.axis("tight")
-    ax8.axis("off")
-
-    table_data = []
-    headers = ["Framework", "FPS", "Time(ms)", "Detect", "Size(MB)", "Setup"]
-
-    for name in framework_names:
-        f = frameworks_data[name]
-        short_name = name.replace("Pose", "").replace("-", "").strip()
-        table_data.append(
-            [
-                short_name,
-                f"{f['mean_fps']:.1f}",
-                f"{f['mean_inference_time_ms']:.1f}",
-                f"{f['mean_detections']:.1f}",
-                f"{f['model_size_mb']:.0f}",
-                f["setup_complexity"],
-            ]
-        )
-
-    table = ax8.table(
-        cellText=table_data,
-        colLabels=headers,
-        cellLoc="center",
-        loc="center",
-        colColours=["lightgray"] * len(headers),
-    )
-    table.auto_set_font_size(False)
-    table.set_fontsize(10)
-    table.scale(1, 2.5)
+    ax6.set_yticks(range(len(framework_names)))
+    ax6.set_yticklabels(framework_names)
+    ax6.set_xlabel("Complexity", fontsize=11, fontweight="bold")
+    ax6.set_title("Setup Complexity", fontsize=13, fontweight="bold")
+    ax6.set_xticks([1, 2, 3])
+    ax6.set_xticklabels(["Low", "Medium", "High"])
+    ax6.grid(axis="x", alpha=0.3)
 
     # Overall title
     video_info = results["video_info"]
@@ -1107,7 +1051,7 @@ def plot_results(results: Dict, output_dir: Path):
         f"October 3rd Framework Evaluation - YOLO11-Pose Selected",
         fontsize=15,
         fontweight="bold",
-        y=0.91,
+        y=0.98,
     )
 
     # Save plot

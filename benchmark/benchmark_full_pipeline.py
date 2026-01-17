@@ -449,6 +449,26 @@ def get_hardware_info() -> str:
     return "CPU"
 
 
+def get_short_label(pipeline_name: str) -> str:
+    """Convert long pipeline names to short display labels."""
+    # Extract model size (e.g., "M" from "YOLO-M Only")
+    model_size = ""
+    if "YOLO-" in pipeline_name:
+        parts = pipeline_name.split("YOLO-")[1]
+        model_size = parts[0]  # Get first char (N, S, M, L, X)
+
+    if "Only" in pipeline_name or (
+        "SAM" not in pipeline_name and "SigLIP" not in pipeline_name
+    ):
+        return f"YOLO-{model_size}"
+    elif "SAM" in pipeline_name and "SigLIP" not in pipeline_name:
+        return f"+ SAM"
+    elif "SAM" in pipeline_name and "SigLIP" in pipeline_name:
+        return f"+ SAM+SigLIP"
+    else:
+        return pipeline_name
+
+
 def plot_results(results: Dict, output_dir: Path):
     """Generate comparison plots."""
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -459,11 +479,12 @@ def plot_results(results: Dict, output_dir: Path):
         return
 
     pipeline_names = list(pipelines_data.keys())
+    short_labels = [get_short_label(name) for name in pipeline_names]
 
     # Create figure with subplots and better spacing
-    fig = plt.figure(figsize=(16, 10))
+    fig = plt.figure(figsize=(16, 6))
     gs = fig.add_gridspec(
-        2, 2, hspace=0.4, wspace=0.35, left=0.08, right=0.95, top=0.82, bottom=0.08
+        1, 3, hspace=0.3, wspace=0.3, left=0.06, right=0.96, top=0.80, bottom=0.12
     )
 
     colors = plt.cm.Set2(np.linspace(0, 1, len(pipeline_names)))
@@ -474,11 +495,11 @@ def plot_results(results: Dict, output_dir: Path):
     std_times = [pipelines_data[p]["std_inference_time_ms"] for p in pipeline_names]
 
     bars = ax1.bar(
-        pipeline_names, mean_times, yerr=std_times, capsize=5, color=colors, alpha=0.8
+        short_labels, mean_times, yerr=std_times, capsize=5, color=colors, alpha=0.8
     )
     ax1.set_ylabel("Inference Time (ms)", fontsize=12, fontweight="bold")
     ax1.set_title("Pipeline Inference Time Comparison", fontsize=14, fontweight="bold")
-    ax1.tick_params(axis="x", rotation=45)
+    ax1.tick_params(axis="x", rotation=0)
     ax1.grid(axis="y", alpha=0.3)
 
     for bar, val in zip(bars, mean_times):
@@ -496,12 +517,12 @@ def plot_results(results: Dict, output_dir: Path):
     ax2 = fig.add_subplot(gs[0, 1])
     fps_values = [pipelines_data[p]["mean_fps"] for p in pipeline_names]
 
-    bars = ax2.bar(pipeline_names, fps_values, color=colors, alpha=0.8)
+    bars = ax2.bar(short_labels, fps_values, color=colors, alpha=0.8)
     ax2.set_ylabel("FPS", fontsize=12, fontweight="bold")
     ax2.set_title(
         "Processing Speed (Frames Per Second)", fontsize=14, fontweight="bold"
     )
-    ax2.tick_params(axis="x", rotation=45)
+    ax2.tick_params(axis="x", rotation=0)
     ax2.grid(axis="y", alpha=0.3)
 
     for bar, val in zip(bars, fps_values):
@@ -516,7 +537,7 @@ def plot_results(results: Dict, output_dir: Path):
         )
 
     # 3. Overhead Analysis (stacked bar)
-    ax3 = fig.add_subplot(gs[1, 0])
+    ax3 = fig.add_subplot(gs[0, 2])
 
     # Calculate overhead relative to YOLO-only
     if len(mean_times) > 0:
@@ -525,7 +546,7 @@ def plot_results(results: Dict, output_dir: Path):
         baseline_times = [baseline_time] * len(pipeline_names)
 
         ax3.bar(
-            pipeline_names,
+            short_labels,
             baseline_times,
             label="YOLO Pose",
             color=colors[0],
@@ -533,7 +554,7 @@ def plot_results(results: Dict, output_dir: Path):
         )
         if len(overheads) > 1:
             ax3.bar(
-                pipeline_names,
+                short_labels,
                 overheads,
                 bottom=baseline_times,
                 label="SAM2 + SigLIP Overhead",
@@ -543,46 +564,9 @@ def plot_results(results: Dict, output_dir: Path):
 
         ax3.set_ylabel("Time (ms)", fontsize=12, fontweight="bold")
         ax3.set_title("Pipeline Component Breakdown", fontsize=14, fontweight="bold")
-        ax3.tick_params(axis="x", rotation=45)
+        ax3.tick_params(axis="x", rotation=0)
         ax3.legend()
         ax3.grid(axis="y", alpha=0.3)
-
-    # 4. Summary Table
-    ax4 = fig.add_subplot(gs[1, 1])
-    ax4.axis("tight")
-    ax4.axis("off")
-
-    table_data = []
-    headers = ["Pipeline", "Time (ms)", "FPS", "Overhead"]
-    baseline = mean_times[0] if mean_times else 0
-
-    for i, name in enumerate(pipeline_names):
-        p = pipelines_data[name]
-        time_ms = p["mean_inference_time_ms"]
-        fps = p["mean_fps"]
-        overhead = (
-            ((time_ms - baseline) / baseline * 100) if baseline > 0 and i > 0 else 0
-        )
-
-        table_data.append(
-            [
-                name,
-                f"{time_ms:.1f}",
-                f"{fps:.1f}",
-                f"+{overhead:.0f}%" if i > 0 else "baseline",
-            ]
-        )
-
-    table = ax4.table(
-        cellText=table_data,
-        colLabels=headers,
-        cellLoc="center",
-        loc="center",
-        colColours=["lightgray"] * len(headers),
-    )
-    table.auto_set_font_size(False)
-    table.set_fontsize(10)
-    table.scale(1, 2.5)
 
     # Overall title
     video_info = results["video_info"]
@@ -595,7 +579,7 @@ def plot_results(results: Dict, output_dir: Path):
         f"(*SAM2 overhead simulated at ~18ms/detection)",
         fontsize=14,
         fontweight="bold",
-        y=0.91,
+        y=0.98,
     )
 
     # Save plot

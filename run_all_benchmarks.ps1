@@ -177,10 +177,8 @@ if ($plotFiles.Count -gt 0) {
 
         if (Test-Path $pdfPath) {
             Write-Host "PDF created: $pdfPath" -ForegroundColor Green
-            $response = Read-Host "Open PDF? (Y/n)"
-            if ($response -eq "" -or $response -match "^[Yy]") {
-                Start-Process $pdfPath
-            }
+            Write-Host "Opening PDF automatically..." -ForegroundColor Cyan
+            Start-Process $pdfPath
         }
     } else {
         Write-Warning "PDF script not found. Individual plots available."

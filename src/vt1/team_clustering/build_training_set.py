@@ -250,6 +250,46 @@ class YOLODetector:
 # ---------------- Cropping and embeddings ----------------
 
 
+def extract_color_histogram(crop: np.ndarray, bins: int = 32) -> np.ndarray:
+    """
+    Extract color histogram features from a crop in LAB color space.
+    LAB is better for uniform/jersey colors than RGB.
+    Returns a normalized histogram vector of shape (bins*2,) for A and B channels.
+    """
+    if crop is None or crop.size == 0:
+        return np.zeros(bins * 2, dtype=np.float32)
+
+    # Ensure 3-channel BGR
+    if crop.ndim == 2:
+        crop = cv2.cvtColor(crop, cv2.COLOR_GRAY2BGR)
+    elif crop.shape[2] == 4:
+        crop = crop[:, :, :3]
+
+    # Convert BGR to LAB
+    try:
+        lab = cv2.cvtColor(crop, cv2.COLOR_BGR2LAB)
+    except Exception:
+        return np.zeros(bins * 2, dtype=np.float32)
+
+    # Extract histograms from A and B channels (ignore L for lighting invariance)
+    hist_a = cv2.calcHist([lab], [1], None, [bins], [0, 256])
+    hist_b = cv2.calcHist([lab], [2], None, [bins], [0, 256])
+
+    # Flatten and normalize
+    hist_a = hist_a.flatten().astype(np.float32)
+    hist_b = hist_b.flatten().astype(np.float32)
+
+    # L2 normalize each histogram
+    norm_a = np.linalg.norm(hist_a)
+    norm_b = np.linalg.norm(hist_b)
+    if norm_a > 1e-6:
+        hist_a = hist_a / norm_a
+    if norm_b > 1e-6:
+        hist_b = hist_b / norm_b
+
+    return np.concatenate([hist_a, hist_b])
+
+
 def central_crop_from_bbox(
     img: np.ndarray, bbox: Tuple[float, float, float, float], ratio: float
 ) -> np.ndarray | None:
@@ -298,9 +338,13 @@ class SigLIPEmbedder:
     def embed_batch(self, crops: List[np.ndarray]) -> np.ndarray:
         # Convert to PIL RGB
         imgs: List[Image.Image] = []
+        valid_crops: List[np.ndarray] = (
+            []
+        )  # Keep track of valid crops for color extraction
         for c in crops:
             if c is None or c.size == 0:
                 continue
+            valid_crops.append(c)  # Store original BGR crop for color histogram
             if c.ndim == 2:
                 c = np.stack([c, c, c], axis=-1)
             if c.shape[2] == 4:
@@ -308,6 +352,8 @@ class SigLIPEmbedder:
             # BGR -> RGB
             c = c[:, :, ::-1]
             imgs.append(Image.fromarray(c))
+
+        # Get SigLIP embeddings
         inputs = self.processor(images=imgs, return_tensors="pt")
         px = inputs["pixel_values"].to(self.device)
         out = self.model(pixel_values=px)
@@ -318,7 +364,19 @@ class SigLIPEmbedder:
             x = out.last_hidden_state  # [B, N, C]
             emb = x.mean(dim=1)
         emb = torch.nn.functional.normalize(emb, p=2.0, dim=-1)
-        return emb.detach().cpu().numpy().astype(np.float32)
+        siglip_embs = emb.detach().cpu().numpy().astype(np.float32)
+
+        # Extract color histograms for each valid crop
+        color_features = []
+        for crop in valid_crops:
+            color_hist = extract_color_histogram(crop, bins=32)
+            color_features.append(color_hist)
+        color_features = np.array(color_features, dtype=np.float32)
+
+        # Concatenate SigLIP embeddings with color features
+        combined_embs = np.concatenate([siglip_embs, color_features], axis=1)
+
+        return combined_embs
 
 
 # ---------------- Main pipeline ----------------

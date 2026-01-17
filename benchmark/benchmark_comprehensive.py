@@ -75,7 +75,9 @@ def load_benchmark_results(json_paths: List[Path]) -> Dict:
 def plot_comparison(results: List[Dict], output_path: Path):
     """Create comprehensive comparison plot."""
     fig = plt.figure(figsize=(18, 12))
-    gs = fig.add_gridspec(3, 3, hspace=0.35, wspace=0.35)
+    gs = fig.add_gridspec(
+        3, 3, hspace=0.35, wspace=0.35, top=0.90, bottom=0.05, left=0.05, right=0.98
+    )
 
     # Organize data
     all_configs = []
@@ -149,38 +151,9 @@ def plot_comparison(results: List[Dict], output_path: Path):
     for i, (bar, val) in enumerate(zip(bars, confidences)):
         ax4.text(val, i, f" {val:.3f}", va="center", fontsize=8)
 
-    # 5. Speed vs Accuracy Scatter
+    # 5. FPS vs Confidence Scatter
     ax5 = fig.add_subplot(gs[1, 1])
     ax5.scatter(
-        inf_times,
-        detections,
-        s=200,
-        c=range(len(model_names)),
-        cmap="tab20",
-        alpha=0.7,
-        edgecolors="black",
-        linewidth=1.5,
-    )
-
-    for i, name in enumerate(model_names):
-        ax5.annotate(
-            name,
-            (inf_times[i], detections[i]),
-            fontsize=8,
-            ha="right",
-            va="bottom",
-            xytext=(-5, 5),
-            textcoords="offset points",
-        )
-
-    ax5.set_xlabel("Inference Time (ms)", fontsize=11, fontweight="bold")
-    ax5.set_ylabel("Detections per Frame", fontsize=11, fontweight="bold")
-    ax5.set_title("Speed vs Detection Count Trade-off", fontsize=13, fontweight="bold")
-    ax5.grid(True, alpha=0.3)
-
-    # 6. FPS vs Confidence Scatter
-    ax6 = fig.add_subplot(gs[1, 2])
-    ax6.scatter(
         fps_values,
         confidences,
         s=200,
@@ -192,7 +165,7 @@ def plot_comparison(results: List[Dict], output_path: Path):
     )
 
     for i, name in enumerate(model_names):
-        ax6.annotate(
+        ax5.annotate(
             name,
             (fps_values[i], confidences[i]),
             fontsize=8,
@@ -202,24 +175,24 @@ def plot_comparison(results: List[Dict], output_path: Path):
             textcoords="offset points",
         )
 
-    ax6.set_xlabel("FPS", fontsize=11, fontweight="bold")
-    ax6.set_ylabel("Confidence Score", fontsize=11, fontweight="bold")
-    ax6.set_title("Speed vs Confidence Trade-off", fontsize=13, fontweight="bold")
-    ax6.grid(True, alpha=0.3)
+    ax5.set_xlabel("FPS", fontsize=11, fontweight="bold")
+    ax5.set_ylabel("Confidence Score", fontsize=11, fontweight="bold")
+    ax5.set_title("Speed vs Confidence Trade-off", fontsize=13, fontweight="bold")
+    ax5.grid(True, alpha=0.3)
 
-    # 7. Load Time
-    ax7 = fig.add_subplot(gs[2, 0])
+    # 6. Load Time
+    ax6 = fig.add_subplot(gs[2, 0])
     load_times = [c["load_time"] for c in all_configs]
-    bars = ax7.bar(range(len(model_names)), load_times, color=colors, alpha=0.8)
-    ax7.set_ylabel("Load Time (s)", fontsize=11, fontweight="bold")
-    ax7.set_title("Model Initialization Time", fontsize=13, fontweight="bold")
-    ax7.set_xticks(range(len(model_names)))
-    ax7.set_xticklabels(model_names, rotation=45, ha="right", fontsize=9)
-    ax7.grid(axis="y", alpha=0.3)
+    bars = ax6.bar(range(len(model_names)), load_times, color=colors, alpha=0.8)
+    ax6.set_ylabel("Load Time (s)", fontsize=11, fontweight="bold")
+    ax6.set_title("Model Initialization Time", fontsize=13, fontweight="bold")
+    ax6.set_xticks(range(len(model_names)))
+    ax6.set_xticklabels(model_names, rotation=45, ha="right", fontsize=9)
+    ax6.grid(axis="y", alpha=0.3)
 
     for bar, val in zip(bars, load_times):
         height = bar.get_height()
-        ax7.text(
+        ax6.text(
             bar.get_x() + bar.get_width() / 2.0,
             height,
             f"{val:.2f}s",
@@ -228,23 +201,23 @@ def plot_comparison(results: List[Dict], output_path: Path):
             fontsize=8,
         )
 
-    # 8. Efficiency Score (custom metric)
-    ax8 = fig.add_subplot(gs[2, 1])
+    # 7. Efficiency Score (custom metric)
+    ax7 = fig.add_subplot(gs[2, 1])
     # Efficiency = (FPS * Detections * Confidence) / 1000
     efficiency = [
         (fps_values[i] * detections[i] * confidences[i]) / 100
         for i in range(len(model_names))
     ]
-    bars = ax8.bar(range(len(model_names)), efficiency, color=colors, alpha=0.8)
-    ax8.set_ylabel("Efficiency Score", fontsize=11, fontweight="bold")
-    ax8.set_title("Overall Efficiency Metric", fontsize=13, fontweight="bold")
-    ax8.set_xticks(range(len(model_names)))
-    ax8.set_xticklabels(model_names, rotation=45, ha="right", fontsize=9)
-    ax8.grid(axis="y", alpha=0.3)
+    bars = ax7.bar(range(len(model_names)), efficiency, color=colors, alpha=0.8)
+    ax7.set_ylabel("Efficiency Score", fontsize=11, fontweight="bold")
+    ax7.set_title("Overall Efficiency Metric", fontsize=13, fontweight="bold")
+    ax7.set_xticks(range(len(model_names)))
+    ax7.set_xticklabels(model_names, rotation=45, ha="right", fontsize=9)
+    ax7.grid(axis="y", alpha=0.3)
 
     for bar, val in zip(bars, efficiency):
         height = bar.get_height()
-        ax8.text(
+        ax7.text(
             bar.get_x() + bar.get_width() / 2.0,
             height,
             f"{val:.2f}",
@@ -253,42 +226,13 @@ def plot_comparison(results: List[Dict], output_path: Path):
             fontsize=8,
         )
 
-    # 9. Summary Table
-    ax9 = fig.add_subplot(gs[2, 2])
-    ax9.axis("tight")
-    ax9.axis("off")
-
-    table_data = []
-    for i, config in enumerate(all_configs[:8]):  # Limit to 8 rows
-        table_data.append(
-            [
-                config["model"][:12],  # Truncate long names
-                f"{config['fps']:.1f}",
-                f"{config['inference_ms']:.1f}",
-                f"{config['detections']:.1f}",
-                f"{config['confidence']:.3f}",
-            ]
-        )
-
-    headers = ["Model", "FPS", "Time(ms)", "Det", "Conf"]
-    table = ax9.table(
-        cellText=table_data,
-        colLabels=headers,
-        cellLoc="center",
-        loc="center",
-        colColours=["lightgray"] * len(headers),
-    )
-    table.auto_set_font_size(False)
-    table.set_fontsize(9)
-    table.scale(1, 2)
-
     # Overall title
     fig.suptitle(
         "Comprehensive Pose Estimation Model Benchmark\n"
         "Performance Comparison Across Multiple Configurations",
         fontsize=16,
         fontweight="bold",
-        y=0.98,
+        y=0.97,
     )
 
     plt.savefig(output_path, dpi=300, bbox_inches="tight")
