@@ -24,6 +24,19 @@ from ultralytics import YOLO
 
 matplotlib.use("Agg")  # Non-interactive backend
 
+# ============================================================================
+# PLOT CONFIGURATION
+# ============================================================================
+# Gap between main title and subplots (as fraction of figure height)
+# Smaller value = less space, larger value = more space
+# Recommended range: 0.04 (tight) to 0.15 (spacious)
+TITLE_SUBPLOT_GAP = 0.20  # Default: 10% of figure height
+
+# Automatic calculations (don't modify these)
+TITLE_Y_POSITION = 0.98  # Title near top of figure
+GRIDSPEC_TOP = TITLE_Y_POSITION - TITLE_SUBPLOT_GAP  # Subplots start below gap
+# ============================================================================
+
 
 class PoseModelBenchmark:
     """Base class for pose estimation model benchmarking."""
@@ -474,7 +487,14 @@ def plot_results(results: Dict, output_dir: Path):
     # Create figure with subplots and better spacing
     fig = plt.figure(figsize=(16, 8))
     gs = fig.add_gridspec(
-        2, 2, hspace=0.35, wspace=0.35, left=0.08, right=0.95, top=0.88, bottom=0.08
+        2,
+        2,
+        hspace=0.35,
+        wspace=0.35,
+        left=0.08,
+        right=0.95,
+        top=GRIDSPEC_TOP,
+        bottom=0.08,
     )
 
     # 1. Inference Time Comparison
@@ -580,7 +600,7 @@ def plot_results(results: Dict, output_dir: Path):
         f'Frames: {video_info["frames_processed"]}',
         fontsize=16,
         fontweight="bold",
-        y=0.98,
+        y=TITLE_Y_POSITION,
     )
 
     # Save plot

@@ -24,6 +24,20 @@ from ultralytics import YOLO
 
 matplotlib.use("Agg")
 
+# ============================================================================
+# PLOT CONFIGURATION
+# ============================================================================
+# Gap between main title and subplots (as fraction of figure height)
+# Smaller value = less space, larger value = more space
+# Recommended range: 0.04 (tight) to 0.15 (spacious)
+# Note: This benchmark has a 3-line title, so default gap is larger
+TITLE_SUBPLOT_GAP = 0.2  # Default: 12% of figure height (larger for 3-line title)
+
+# Automatic calculations (don't modify these)
+TITLE_Y_POSITION = 0.98  # Title near top of figure
+GRIDSPEC_TOP = TITLE_Y_POSITION - TITLE_SUBPLOT_GAP  # Subplots start below gap
+# ============================================================================
+
 # Check for optional dependencies
 try:
     from transformers import AutoImageProcessor
@@ -484,7 +498,14 @@ def plot_results(results: Dict, output_dir: Path):
     # Create figure with subplots and better spacing
     fig = plt.figure(figsize=(16, 6))
     gs = fig.add_gridspec(
-        1, 3, hspace=0.3, wspace=0.3, left=0.06, right=0.96, top=0.80, bottom=0.12
+        1,
+        3,
+        hspace=0.3,
+        wspace=0.3,
+        left=0.06,
+        right=0.96,
+        top=GRIDSPEC_TOP,
+        bottom=0.12,
     )
 
     colors = plt.cm.Set2(np.linspace(0, 1, len(pipeline_names)))
@@ -579,7 +600,7 @@ def plot_results(results: Dict, output_dir: Path):
         f"(*SAM2 overhead simulated at ~18ms/detection)",
         fontsize=14,
         fontweight="bold",
-        y=0.98,
+        y=TITLE_Y_POSITION,
     )
 
     # Save plot

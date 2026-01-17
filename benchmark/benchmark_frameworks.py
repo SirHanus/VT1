@@ -28,6 +28,19 @@ import numpy as np
 import torch
 from tqdm import tqdm
 
+# ============================================================================
+# PLOT CONFIGURATION
+# ============================================================================
+# Gap between main title and subplots (as fraction of figure height)
+# Smaller value = less space, larger value = more space
+# Recommended range: 0.04 (tight) to 0.15 (spacious)
+TITLE_SUBPLOT_GAP = 0.20  # Default: 10% of figure height
+
+# Automatic calculations (don't modify these)
+TITLE_Y_POSITION = 0.98  # Title near top of figure
+GRIDSPEC_TOP = TITLE_Y_POSITION - TITLE_SUBPLOT_GAP  # Subplots start below gap
+# ============================================================================
+
 matplotlib.use("Agg")
 
 # Check for framework availability
@@ -874,10 +887,34 @@ def plot_results(results: Dict, output_dir: Path):
 
     framework_names = list(frameworks_data.keys())
 
+    # Create shortened labels for X-axis
+    def shorten_framework_name(name: str) -> str:
+        """Shorten framework names to prevent overlap."""
+        name = name.replace("Pose", "").replace("-", "").strip()
+        # Further abbreviations
+        if "YOLO" in name:
+            return "YOLO"
+        elif "MediaPipe" in name:
+            return "MediaPipe"
+        elif "MMPose" in name:
+            return "MMPose"
+        elif "OpenPose" in name:
+            return "OpenPose"
+        return name
+
+    short_labels = [shorten_framework_name(name) for name in framework_names]
+
     # Create figure with subplots and better spacing
-    fig = plt.figure(figsize=(16, 12))
+    fig = plt.figure(figsize=(16, 8))
     gs = fig.add_gridspec(
-        3, 2, hspace=0.45, wspace=0.4, left=0.08, right=0.95, top=0.88, bottom=0.08
+        2,
+        2,
+        hspace=0.40,
+        wspace=0.4,
+        left=0.08,
+        right=0.95,
+        top=GRIDSPEC_TOP,
+        bottom=0.08,
     )
 
     colors = plt.cm.Set3(np.linspace(0, 1, len(framework_names)))
@@ -896,7 +933,7 @@ def plot_results(results: Dict, output_dir: Path):
         alpha=0.8,
     )
     ax1.set_xticks(range(len(framework_names)))
-    ax1.set_xticklabels(framework_names, rotation=45, ha="right")
+    ax1.set_xticklabels(short_labels, rotation=45, ha="right")
     ax1.set_ylabel("Inference Time (ms)", fontsize=11, fontweight="bold")
     ax1.set_title("Mean Inference Time per Frame", fontsize=13, fontweight="bold")
     ax1.grid(axis="y", alpha=0.3)
@@ -918,7 +955,7 @@ def plot_results(results: Dict, output_dir: Path):
 
     bars = ax2.bar(range(len(framework_names)), fps_values, color=colors, alpha=0.8)
     ax2.set_xticks(range(len(framework_names)))
-    ax2.set_xticklabels(framework_names, rotation=45, ha="right")
+    ax2.set_xticklabels(short_labels, rotation=45, ha="right")
     ax2.set_ylabel("FPS", fontsize=11, fontweight="bold")
     ax2.set_title(
         "Processing Speed (Frames Per Second)", fontsize=13, fontweight="bold"
@@ -950,7 +987,7 @@ def plot_results(results: Dict, output_dir: Path):
         alpha=0.8,
     )
     ax3.set_xticks(range(len(framework_names)))
-    ax3.set_xticklabels(framework_names, rotation=45, ha="right")
+    ax3.set_xticklabels(short_labels, rotation=45, ha="right")
     ax3.set_ylabel("Detections", fontsize=11, fontweight="bold")
     ax3.set_title("Average Detections per Frame", fontsize=13, fontweight="bold")
     ax3.grid(axis="y", alpha=0.3)
@@ -972,7 +1009,7 @@ def plot_results(results: Dict, output_dir: Path):
 
     bars = ax4.bar(range(len(framework_names)), model_sizes, color=colors, alpha=0.8)
     ax4.set_xticks(range(len(framework_names)))
-    ax4.set_xticklabels(framework_names, rotation=45, ha="right")
+    ax4.set_xticklabels(short_labels, rotation=45, ha="right")
     ax4.set_ylabel("Model Size (MB)", fontsize=11, fontweight="bold")
     ax4.set_title("Model Size Comparison", fontsize=13, fontweight="bold")
     ax4.grid(axis="y", alpha=0.3)
@@ -987,58 +1024,6 @@ def plot_results(results: Dict, output_dir: Path):
             va="bottom",
             fontsize=9,
         )
-    # 5. Speed vs Accuracy scatter
-    ax5 = fig.add_subplot(gs[2, 0])
-    scatter_fps = []
-    scatter_det = []
-    scatter_names = []
-
-    for name in framework_names:
-        f = frameworks_data[name]
-        scatter_fps.append(f["mean_fps"])
-        scatter_det.append(f["mean_detections"])
-        scatter_names.append(name.split()[0])  # Short name
-
-    ax5.scatter(
-        scatter_fps,
-        scatter_det,
-        s=200,
-        c=colors,
-        alpha=0.8,
-        edgecolors="black",
-        linewidth=2,
-    )
-
-    for i, name in enumerate(scatter_names):
-        ax5.annotate(
-            name,
-            (scatter_fps[i], scatter_det[i]),
-            xytext=(5, 5),
-            textcoords="offset points",
-            fontsize=9,
-        )
-
-    ax5.set_xlabel("FPS", fontsize=11, fontweight="bold")
-    ax5.set_ylabel("Detections/Frame", fontsize=11, fontweight="bold")
-    ax5.set_title("Speed vs Detection Trade-off", fontsize=13, fontweight="bold")
-    ax5.grid(alpha=0.3)
-
-    # 6. Setup Complexity (qualitative)
-    ax6 = fig.add_subplot(gs[2, 1])
-    complexities = [frameworks_data[f]["setup_complexity"] for f in framework_names]
-    complexity_map = {"Low": 1, "Medium": 2, "High": 3}
-    complexity_values = [complexity_map.get(c, 2) for c in complexities]
-
-    bars = ax6.barh(
-        range(len(framework_names)), complexity_values, color=colors, alpha=0.8
-    )
-    ax6.set_yticks(range(len(framework_names)))
-    ax6.set_yticklabels(framework_names)
-    ax6.set_xlabel("Complexity", fontsize=11, fontweight="bold")
-    ax6.set_title("Setup Complexity", fontsize=13, fontweight="bold")
-    ax6.set_xticks([1, 2, 3])
-    ax6.set_xticklabels(["Low", "Medium", "High"])
-    ax6.grid(axis="x", alpha=0.3)
 
     # Overall title
     video_info = results["video_info"]
@@ -1051,7 +1036,7 @@ def plot_results(results: Dict, output_dir: Path):
         f"October 3rd Framework Evaluation - YOLO11-Pose Selected",
         fontsize=15,
         fontweight="bold",
-        y=0.98,
+        y=TITLE_Y_POSITION,
     )
 
     # Save plot

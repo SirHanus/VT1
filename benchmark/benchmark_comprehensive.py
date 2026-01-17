@@ -19,6 +19,19 @@ import numpy as np
 
 matplotlib.use("Agg")
 
+# ============================================================================
+# PLOT CONFIGURATION
+# ============================================================================
+# Gap between main title and subplots (as fraction of figure height)
+# Smaller value = less space, larger value = more space
+# Recommended range: 0.04 (tight) to 0.15 (spacious)
+TITLE_SUBPLOT_GAP = 0.09  # Default: 9% of figure height
+
+# Automatic calculations (don't modify these)
+TITLE_Y_POSITION = 0.97  # Title near top of figure
+GRIDSPEC_TOP = TITLE_Y_POSITION - TITLE_SUBPLOT_GAP  # Subplots start below gap
+# ============================================================================
+
 
 def run_benchmark(
     video: str,
@@ -76,7 +89,14 @@ def plot_comparison(results: List[Dict], output_path: Path):
     """Create comprehensive comparison plot."""
     fig = plt.figure(figsize=(18, 12))
     gs = fig.add_gridspec(
-        3, 3, hspace=0.35, wspace=0.35, top=0.90, bottom=0.05, left=0.05, right=0.98
+        3,
+        3,
+        hspace=0.35,
+        wspace=0.35,
+        top=GRIDSPEC_TOP,
+        bottom=0.05,
+        left=0.05,
+        right=0.98,
     )
 
     # Organize data
@@ -232,7 +252,7 @@ def plot_comparison(results: List[Dict], output_path: Path):
         "Performance Comparison Across Multiple Configurations",
         fontsize=16,
         fontweight="bold",
-        y=0.97,
+        y=TITLE_Y_POSITION,
     )
 
     plt.savefig(output_path, dpi=300, bbox_inches="tight")
