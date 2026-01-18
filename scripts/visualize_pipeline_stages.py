@@ -328,12 +328,16 @@ def create_pipeline_visualization(
     print(f"\nCreating visualization...")
     fig = plt.figure(figsize=(20, 12))
 
-    # Create custom grid: 2 rows, 3 columns
+    # Create custom grid using GridSpec: 2 rows, 2 columns
     # Top row: YOLO (left) and SAM2 (right)
-    ax1 = plt.subplot(2, 3, 1)
-    ax2 = plt.subplot(2, 3, 3)
-    # Bottom row: Team Clustering (center, spanning middle column)
-    ax3 = plt.subplot(2, 3, 5)
+    # Bottom row: Team Clustering spanning both columns
+    from matplotlib.gridspec import GridSpec
+
+    gs = GridSpec(2, 2, figure=fig, hspace=0.15, wspace=0.15)
+
+    ax1 = fig.add_subplot(gs[0, 0])  # Top-left
+    ax2 = fig.add_subplot(gs[0, 1])  # Top-right
+    ax3 = fig.add_subplot(gs[1, :])  # Bottom row, spanning both columns
 
     ax1.imshow(cv2.cvtColor(img_yolo, cv2.COLOR_BGR2RGB))
     ax1.set_title("1. YOLO Pose Detection", fontsize=16, fontweight="bold")
@@ -348,9 +352,7 @@ def create_pipeline_visualization(
     ax3.axis("off")
 
     # Adjust spacing to make it tighter
-    plt.subplots_adjust(
-        left=0.05, right=0.95, top=0.95, bottom=0.05, hspace=0.15, wspace=0.2
-    )
+    plt.subplots_adjust(left=0.05, right=0.95, top=0.95, bottom=0.05)
     plt.savefig(output_path, dpi=150, bbox_inches="tight")
     print(f"✓ Saved visualization to: {output_path}")
 
