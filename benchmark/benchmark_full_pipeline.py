@@ -31,7 +31,12 @@ matplotlib.use("Agg")
 # Smaller value = less space, larger value = more space
 # Recommended range: 0.04 (tight) to 0.15 (spacious)
 # Note: This benchmark has a 3-line title, so default gap is larger
-TITLE_SUBPLOT_GAP = 0.2  # Default: 12% of figure height (larger for 3-line title)
+TITLE_SUBPLOT_GAP = 0.4  # Default: 20% of figure height (larger for 3-line title)
+
+# Font size multiplier for all text in the plot
+# 1.0 = default sizes, 1.2 = 20% larger, 0.8 = 20% smaller
+# Recommended range: 0.7 (small) to 1.5 (large)
+FONT_SIZE_MULTIPLIER = 1.2  # Default: 1.0 (no scaling)
 
 # Automatic calculations (don't modify these)
 TITLE_Y_POSITION = 0.98  # Title near top of figure
@@ -496,7 +501,7 @@ def plot_results(results: Dict, output_dir: Path):
     short_labels = [get_short_label(name) for name in pipeline_names]
 
     # Create figure with subplots and better spacing
-    fig = plt.figure(figsize=(16, 6))
+    fig = plt.figure(figsize=(16, 8))
     gs = fig.add_gridspec(
         1,
         3,
@@ -518,9 +523,18 @@ def plot_results(results: Dict, output_dir: Path):
     bars = ax1.bar(
         short_labels, mean_times, yerr=std_times, capsize=5, color=colors, alpha=0.8
     )
-    ax1.set_ylabel("Inference Time (ms)", fontsize=12, fontweight="bold")
-    ax1.set_title("Pipeline Inference Time Comparison", fontsize=14, fontweight="bold")
-    ax1.tick_params(axis="x", rotation=0)
+    ax1.set_ylabel(
+        "Inference Time (ms)",
+        fontsize=int(12 * FONT_SIZE_MULTIPLIER),
+        fontweight="bold",
+    )
+    ax1.set_title(
+        "Pipeline Inference Time Comparison",
+        fontsize=int(14 * FONT_SIZE_MULTIPLIER),
+        fontweight="bold",
+    )
+    ax1.tick_params(axis="x", rotation=0, labelsize=int(11 * FONT_SIZE_MULTIPLIER))
+    ax1.tick_params(axis="y", labelsize=int(11 * FONT_SIZE_MULTIPLIER))
     ax1.grid(axis="y", alpha=0.3)
 
     for bar, val in zip(bars, mean_times):
@@ -531,7 +545,7 @@ def plot_results(results: Dict, output_dir: Path):
             f"{val:.1f}ms",
             ha="center",
             va="bottom",
-            fontsize=10,
+            fontsize=int(10 * FONT_SIZE_MULTIPLIER),
         )
 
     # 2. FPS Comparison
@@ -539,11 +553,14 @@ def plot_results(results: Dict, output_dir: Path):
     fps_values = [pipelines_data[p]["mean_fps"] for p in pipeline_names]
 
     bars = ax2.bar(short_labels, fps_values, color=colors, alpha=0.8)
-    ax2.set_ylabel("FPS", fontsize=12, fontweight="bold")
+    ax2.set_ylabel("FPS", fontsize=int(12 * FONT_SIZE_MULTIPLIER), fontweight="bold")
     ax2.set_title(
-        "Processing Speed (Frames Per Second)", fontsize=14, fontweight="bold"
+        "Processing Speed (Frames Per Second)",
+        fontsize=int(14 * FONT_SIZE_MULTIPLIER),
+        fontweight="bold",
     )
-    ax2.tick_params(axis="x", rotation=0)
+    ax2.tick_params(axis="x", rotation=0, labelsize=int(11 * FONT_SIZE_MULTIPLIER))
+    ax2.tick_params(axis="y", labelsize=int(11 * FONT_SIZE_MULTIPLIER))
     ax2.grid(axis="y", alpha=0.3)
 
     for bar, val in zip(bars, fps_values):
@@ -554,7 +571,7 @@ def plot_results(results: Dict, output_dir: Path):
             f"{val:.1f}",
             ha="center",
             va="bottom",
-            fontsize=10,
+            fontsize=int(10 * FONT_SIZE_MULTIPLIER),
         )
 
     # 3. Overhead Analysis (stacked bar)
@@ -583,10 +600,17 @@ def plot_results(results: Dict, output_dir: Path):
                 alpha=0.8,
             )
 
-        ax3.set_ylabel("Time (ms)", fontsize=12, fontweight="bold")
-        ax3.set_title("Pipeline Component Breakdown", fontsize=14, fontweight="bold")
-        ax3.tick_params(axis="x", rotation=0)
-        ax3.legend()
+        ax3.set_ylabel(
+            "Time (ms)", fontsize=int(12 * FONT_SIZE_MULTIPLIER), fontweight="bold"
+        )
+        ax3.set_title(
+            "Pipeline Component Breakdown",
+            fontsize=int(14 * FONT_SIZE_MULTIPLIER),
+            fontweight="bold",
+        )
+        ax3.tick_params(axis="x", rotation=0, labelsize=int(11 * FONT_SIZE_MULTIPLIER))
+        ax3.tick_params(axis="y", labelsize=int(11 * FONT_SIZE_MULTIPLIER))
+        ax3.legend(fontsize=int(10 * FONT_SIZE_MULTIPLIER))
         ax3.grid(axis="y", alpha=0.3)
 
     # Overall title
@@ -598,7 +622,7 @@ def plot_results(results: Dict, output_dir: Path):
         f'Resolution: {video_info["resolution"]} | '
         f'Frames: {video_info["frames_processed"]}\n'
         f"(*SAM2 overhead simulated at ~18ms/detection)",
-        fontsize=14,
+        fontsize=int(14 * FONT_SIZE_MULTIPLIER),
         fontweight="bold",
         y=TITLE_Y_POSITION,
     )

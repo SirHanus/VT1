@@ -34,7 +34,12 @@ from tqdm import tqdm
 # Gap between main title and subplots (as fraction of figure height)
 # Smaller value = less space, larger value = more space
 # Recommended range: 0.04 (tight) to 0.15 (spacious)
-TITLE_SUBPLOT_GAP = 0.20  # Default: 10% of figure height
+TITLE_SUBPLOT_GAP = 0.15  # Default: 10% of figure height
+
+# Font size multiplier for all text in the plot
+# 1.0 = default sizes, 1.2 = 20% larger, 0.8 = 20% smaller
+# Recommended range: 0.7 (small) to 1.5 (large)
+FONT_SIZE_MULTIPLIER = 1.0  # Default: 1.0 (no scaling)
 
 # Automatic calculations (don't modify these)
 TITLE_Y_POSITION = 0.98  # Title near top of figure
@@ -264,7 +269,7 @@ class PyTorchKeypointBenchmark(FrameworkBenchmark):
     """PyTorch Keypoint R-CNN baseline."""
 
     def __init__(self, device: str = "cuda"):
-        super().__init__("PyTorch Keypoint R-CNN", device)
+        super().__init__("Keypoint R-CNN", device)
         self.available = True
         self.setup_complexity = "Low"
 
@@ -933,9 +938,20 @@ def plot_results(results: Dict, output_dir: Path):
         alpha=0.8,
     )
     ax1.set_xticks(range(len(framework_names)))
-    ax1.set_xticklabels(short_labels, rotation=45, ha="right")
-    ax1.set_ylabel("Inference Time (ms)", fontsize=11, fontweight="bold")
-    ax1.set_title("Mean Inference Time per Frame", fontsize=13, fontweight="bold")
+    ax1.set_xticklabels(
+        short_labels, rotation=45, ha="right", fontsize=int(10 * FONT_SIZE_MULTIPLIER)
+    )
+    ax1.set_ylabel(
+        "Inference Time (ms)",
+        fontsize=int(11 * FONT_SIZE_MULTIPLIER),
+        fontweight="bold",
+    )
+    ax1.set_title(
+        "Mean Inference Time per Frame",
+        fontsize=int(13 * FONT_SIZE_MULTIPLIER),
+        fontweight="bold",
+    )
+    ax1.tick_params(axis="y", labelsize=int(10 * FONT_SIZE_MULTIPLIER))
     ax1.grid(axis="y", alpha=0.3)
 
     for bar, val in zip(bars, mean_times):
@@ -946,7 +962,7 @@ def plot_results(results: Dict, output_dir: Path):
             f"{val:.1f}ms",
             ha="center",
             va="bottom",
-            fontsize=9,
+            fontsize=int(9 * FONT_SIZE_MULTIPLIER),
         )
 
     # 2. FPS Comparison
@@ -955,11 +971,16 @@ def plot_results(results: Dict, output_dir: Path):
 
     bars = ax2.bar(range(len(framework_names)), fps_values, color=colors, alpha=0.8)
     ax2.set_xticks(range(len(framework_names)))
-    ax2.set_xticklabels(short_labels, rotation=45, ha="right")
-    ax2.set_ylabel("FPS", fontsize=11, fontweight="bold")
-    ax2.set_title(
-        "Processing Speed (Frames Per Second)", fontsize=13, fontweight="bold"
+    ax2.set_xticklabels(
+        short_labels, rotation=45, ha="right", fontsize=int(10 * FONT_SIZE_MULTIPLIER)
     )
+    ax2.set_ylabel("FPS", fontsize=int(11 * FONT_SIZE_MULTIPLIER), fontweight="bold")
+    ax2.set_title(
+        "Processing Speed (Frames Per Second)",
+        fontsize=int(13 * FONT_SIZE_MULTIPLIER),
+        fontweight="bold",
+    )
+    ax2.tick_params(axis="y", labelsize=int(10 * FONT_SIZE_MULTIPLIER))
     ax2.grid(axis="y", alpha=0.3)
 
     for bar, val in zip(bars, fps_values):
@@ -970,7 +991,7 @@ def plot_results(results: Dict, output_dir: Path):
             f"{val:.1f}",
             ha="center",
             va="bottom",
-            fontsize=9,
+            fontsize=int(9 * FONT_SIZE_MULTIPLIER),
         )
 
     # 3. Detection Count
@@ -987,9 +1008,18 @@ def plot_results(results: Dict, output_dir: Path):
         alpha=0.8,
     )
     ax3.set_xticks(range(len(framework_names)))
-    ax3.set_xticklabels(short_labels, rotation=45, ha="right")
-    ax3.set_ylabel("Detections", fontsize=11, fontweight="bold")
-    ax3.set_title("Average Detections per Frame", fontsize=13, fontweight="bold")
+    ax3.set_xticklabels(
+        short_labels, rotation=45, ha="right", fontsize=int(10 * FONT_SIZE_MULTIPLIER)
+    )
+    ax3.set_ylabel(
+        "Detections", fontsize=int(11 * FONT_SIZE_MULTIPLIER), fontweight="bold"
+    )
+    ax3.set_title(
+        "Average Detections per Frame",
+        fontsize=int(13 * FONT_SIZE_MULTIPLIER),
+        fontweight="bold",
+    )
+    ax3.tick_params(axis="y", labelsize=int(10 * FONT_SIZE_MULTIPLIER))
     ax3.grid(axis="y", alpha=0.3)
 
     for bar, val in zip(bars, det_means):
@@ -1000,7 +1030,7 @@ def plot_results(results: Dict, output_dir: Path):
             f"{val:.1f}",
             ha="center",
             va="bottom",
-            fontsize=9,
+            fontsize=int(9 * FONT_SIZE_MULTIPLIER),
         )
 
     # 4. Model Size
@@ -1009,9 +1039,18 @@ def plot_results(results: Dict, output_dir: Path):
 
     bars = ax4.bar(range(len(framework_names)), model_sizes, color=colors, alpha=0.8)
     ax4.set_xticks(range(len(framework_names)))
-    ax4.set_xticklabels(short_labels, rotation=45, ha="right")
-    ax4.set_ylabel("Model Size (MB)", fontsize=11, fontweight="bold")
-    ax4.set_title("Model Size Comparison", fontsize=13, fontweight="bold")
+    ax4.set_xticklabels(
+        short_labels, rotation=45, ha="right", fontsize=int(10 * FONT_SIZE_MULTIPLIER)
+    )
+    ax4.set_ylabel(
+        "Model Size (MB)", fontsize=int(11 * FONT_SIZE_MULTIPLIER), fontweight="bold"
+    )
+    ax4.set_title(
+        "Model Size Comparison",
+        fontsize=int(13 * FONT_SIZE_MULTIPLIER),
+        fontweight="bold",
+    )
+    ax4.tick_params(axis="y", labelsize=int(10 * FONT_SIZE_MULTIPLIER))
     ax4.grid(axis="y", alpha=0.3)
 
     for bar, val in zip(bars, model_sizes):
@@ -1022,7 +1061,7 @@ def plot_results(results: Dict, output_dir: Path):
             f"{val:.0f}",
             ha="center",
             va="bottom",
-            fontsize=9,
+            fontsize=int(9 * FONT_SIZE_MULTIPLIER),
         )
 
     # Overall title
@@ -1034,7 +1073,7 @@ def plot_results(results: Dict, output_dir: Path):
         f'Resolution: {video_info["resolution"]} | '
         f'Frames: {video_info["frames_processed"]}\n'
         f"October 3rd Framework Evaluation - YOLO11-Pose Selected",
-        fontsize=15,
+        fontsize=int(15 * FONT_SIZE_MULTIPLIER),
         fontweight="bold",
         y=TITLE_Y_POSITION,
     )

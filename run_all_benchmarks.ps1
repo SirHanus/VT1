@@ -112,7 +112,7 @@ $results = @{
 if (-not $SkipFrameworks) {
     Write-Host "Running Framework Comparison..." -ForegroundColor Yellow
     $frameworkScript = "benchmark\benchmark_frameworks.py"
-    $frameworkFrames = [math]::Min($Frames, 100)
+    $frameworkFrames = $Frames
     $frameworkOutputDir = "benchmark_results\frameworks\run_$timestamp"
 
     if (Test-Path $frameworkScript) {
@@ -148,7 +148,7 @@ if (-not $SkipModelComparison) {
 if (-not $SkipPipeline) {
     Write-Host "Running Pipeline Benchmark..." -ForegroundColor Yellow
     $pipelineScript = "benchmark\benchmark_full_pipeline.py"
-    $pipelineFrames = [math]::Min($Frames, 100)
+    $pipelineFrames = $Frames
     $pipelineOutputDir = "benchmark_results\pipeline\run_$timestamp"
 
     if (Test-Path $pipelineScript) {

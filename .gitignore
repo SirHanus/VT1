@@ -232,3 +232,4 @@ config_local.toml
 /hockey_pose_dataset
 /runs
 /logs
+/TEX
