@@ -242,6 +242,13 @@ class SAM2VideoWrapper:
             dtype=session_dtype,
         )
 
+    def reset_state(self):
+        """Reset all tracking state and create a fresh session."""
+        self._reset_session()
+        self.frames_with_prompts.clear()
+        self.known_ids.clear()
+        self._last_prompts.clear()
+
     def segment_frame(
         self, frame_bgr: np.ndarray, frame_idx: int
     ) -> Dict[int, np.ndarray]:

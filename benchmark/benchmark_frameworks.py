@@ -61,6 +61,8 @@ _FRAMEWORKS_AVAILABLE = {
 # MediaPipe detection - support both legacy (solutions) and new (tasks) API
 mp = None
 mp_use_legacy = False
+mp_vision = None
+mp_python = None
 
 try:
     # First try legacy solutions API (MediaPipe < 0.10)
@@ -79,16 +81,47 @@ try:
             _FRAMEWORKS_AVAILABLE["mediapipe"] = False
     else:
         # New Tasks API (MediaPipe >= 0.10)
-        # For benchmarking, we'll skip MediaPipe 0.10+ as it requires model files
-        # and has a different API that needs significant code changes
-        print("⚠️  MediaPipe 0.10+ detected. Legacy solutions API not available.")
-        print("    MediaPipe benchmarking requires MediaPipe < 0.10 or code updates.")
-        _FRAMEWORKS_AVAILABLE["mediapipe"] = False
-        mp = None
+        try:
+            from mediapipe.tasks import python as mp_python_import
+            from mediapipe.tasks.python import vision as mp_vision_import
+
+            mp_python = mp_python_import
+            mp_vision = mp_vision_import
+            mp_use_legacy = False
+
+            # Check if model file exists
+            from pathlib import Path
+
+            model_path = Path("models/pose_landmarker_heavy.task")
+            if model_path.exists():
+                _FRAMEWORKS_AVAILABLE["mediapipe"] = True
+            else:
+                print("⚠️  MediaPipe 0.10+ detected but model file not found.")
+                print(f"    Expected: {model_path.absolute()}")
+                print("    Downloading model...")
+                # Try to download the model
+                import urllib.request
+
+                model_path.parent.mkdir(exist_ok=True)
+                url = "https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_heavy/float16/latest/pose_landmarker_heavy.task"
+                try:
+                    urllib.request.urlretrieve(url, model_path)
+                    print(f"✅ Model downloaded to {model_path}")
+                    _FRAMEWORKS_AVAILABLE["mediapipe"] = True
+                except Exception as e:
+                    print(f"❌ Failed to download model: {e}")
+                    _FRAMEWORKS_AVAILABLE["mediapipe"] = False
+        except Exception as e:
+            print(f"MediaPipe new API initialization failed: {e}")
+            _FRAMEWORKS_AVAILABLE["mediapipe"] = False
+            mp_python = None
+            mp_vision = None
 
 except ImportError:
     _FRAMEWORKS_AVAILABLE["mediapipe"] = False
     mp = None
+    mp_python = None
+    mp_vision = None
 
 try:
     from openvino.runtime import Core
@@ -161,7 +194,7 @@ class FrameworkBenchmark:
 
 
 class MediaPipeBenchmark(FrameworkBenchmark):
-    """MediaPipe Pose benchmark."""
+    """MediaPipe Pose benchmark - supports both legacy and new APIs."""
 
     def __init__(self, device: str = "cpu"):
         super().__init__("MediaPipe Pose", "cpu")  # MediaPipe runs on CPU
@@ -169,6 +202,8 @@ class MediaPipeBenchmark(FrameworkBenchmark):
         self.setup_complexity = "Low"
         self.mp_pose = None
         self.mp_drawing = None
+        self.use_legacy = mp_use_legacy
+        self.frame_timestamp_ms = 0  # For video mode tracking
 
     def load_model(self):
         """Load MediaPipe pose model."""
@@ -177,17 +212,38 @@ class MediaPipeBenchmark(FrameworkBenchmark):
             return 0.0
 
         start = time.perf_counter()
-        self.mp_pose = mp.solutions.pose
-        self.mp_drawing = mp.solutions.drawing_utils
-        self.model = self.mp_pose.Pose(
-            static_image_mode=False,
-            model_complexity=2,
-            enable_segmentation=False,
-            min_detection_confidence=0.5,
-            min_tracking_confidence=0.5,
-        )
+
+        if self.use_legacy:
+            # Legacy API (MediaPipe < 0.10)
+            self.mp_pose = mp.solutions.pose
+            self.mp_drawing = mp.solutions.drawing_utils
+            self.model = self.mp_pose.Pose(
+                static_image_mode=False,
+                model_complexity=2,
+                enable_segmentation=False,
+                min_detection_confidence=0.5,
+                min_tracking_confidence=0.5,
+            )
+            self.model_size_mb = 5.0  # Approximate
+        else:
+            # New Tasks API (MediaPipe >= 0.10)
+            from pathlib import Path
+
+            model_path = Path("models/pose_landmarker_heavy.task")
+
+            base_options = mp_python.BaseOptions(model_asset_path=str(model_path))
+            options = mp_vision.PoseLandmarkerOptions(
+                base_options=base_options,
+                running_mode=mp_vision.RunningMode.VIDEO,
+                num_poses=10,  # Detect multiple people
+                min_pose_detection_confidence=0.5,
+                min_pose_presence_confidence=0.5,
+                min_tracking_confidence=0.5,
+            )
+            self.model = mp_vision.PoseLandmarker.create_from_options(options)
+            self.model_size_mb = model_path.stat().st_size / (1024 * 1024)
+
         self.load_time = time.perf_counter() - start
-        self.model_size_mb = 5.0  # Approximate
         return self.load_time
 
     def inference(self, frame: np.ndarray) -> Tuple[int, float]:
@@ -196,11 +252,32 @@ class MediaPipeBenchmark(FrameworkBenchmark):
             return 0, 0.0
 
         start = time.perf_counter()
-        rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-        results = self.model.process(rgb_frame)
-        elapsed = (time.perf_counter() - start) * 1000  # ms
 
-        num_detections = 1 if results.pose_landmarks else 0
+        if self.use_legacy:
+            # Legacy API
+            rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+            results = self.model.process(rgb_frame)
+            num_detections = 1 if results.pose_landmarks else 0
+        else:
+            # New Tasks API
+            # Convert frame to MediaPipe Image
+            import mediapipe
+
+            mp_image = mediapipe.Image(
+                image_format=mediapipe.ImageFormat.SRGB,
+                data=cv2.cvtColor(frame, cv2.COLOR_BGR2RGB),
+            )
+
+            # Increment timestamp for video mode
+            self.frame_timestamp_ms += 33  # ~30 fps
+
+            # Detect poses
+            results = self.model.detect_for_video(mp_image, self.frame_timestamp_ms)
+            num_detections = (
+                len(results.pose_landmarks) if results.pose_landmarks else 0
+            )
+
+        elapsed = (time.perf_counter() - start) * 1000  # ms
         return num_detections, elapsed
 
     def get_results(self, frame: np.ndarray):
@@ -208,8 +285,24 @@ class MediaPipeBenchmark(FrameworkBenchmark):
         if not self.available or not self.model:
             return None
 
-        rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-        return self.model.process(rgb_frame)
+        if self.use_legacy:
+            rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+            return self.model.process(rgb_frame)
+        else:
+            import mediapipe
+
+            mp_image = mediapipe.Image(
+                image_format=mediapipe.ImageFormat.SRGB,
+                data=cv2.cvtColor(frame, cv2.COLOR_BGR2RGB),
+            )
+            self.frame_timestamp_ms += 33
+            return self.model.detect_for_video(mp_image, self.frame_timestamp_ms)
+
+    def cleanup(self):
+        """Clean up resources."""
+        if self.model and not self.use_legacy:
+            self.model.close()
+        super().cleanup()
 
 
 class OpenVINOBenchmark(FrameworkBenchmark):
@@ -634,53 +727,129 @@ def export_sample_frames(
                 elif isinstance(framework, MediaPipeBenchmark) and hasattr(
                     framework, "model"
                 ):
-                    # MediaPipe Pose
+                    # MediaPipe Pose - support both APIs
                     results = framework.get_results(annotated)
 
-                    if results and results.pose_landmarks:
-                        # Get image dimensions
-                        h, w = annotated.shape[:2]
+                    if framework.use_legacy:
+                        # Legacy API (MediaPipe < 0.10)
+                        if results and results.pose_landmarks:
+                            # Get image dimensions
+                            h, w = annotated.shape[:2]
 
-                        # Draw landmarks
-                        landmarks = results.pose_landmarks.landmark
+                            # Draw landmarks
+                            landmarks = results.pose_landmarks.landmark
 
-                        # Calculate bounding box from landmarks
-                        x_coords = [lm.x * w for lm in landmarks]
-                        y_coords = [lm.y * h for lm in landmarks]
+                            # Calculate bounding box from landmarks
+                            x_coords = [lm.x * w for lm in landmarks]
+                            y_coords = [lm.y * h for lm in landmarks]
 
-                        if x_coords and y_coords:
-                            x1, y1 = int(min(x_coords)), int(min(y_coords))
-                            x2, y2 = int(max(x_coords)), int(max(y_coords))
-                            cv2.rectangle(
-                                annotated, (x1, y1), (x2, y2), colors["MediaPipe"], 2
-                            )
-
-                        # Draw keypoints
-                        for lm in landmarks:
-                            x, y = int(lm.x * w), int(lm.y * h)
-                            if 0 < x < w and 0 < y < h and lm.visibility > 0.5:
-                                cv2.circle(
-                                    annotated, (x, y), 3, colors["MediaPipe"], -1
-                                )
-
-                        # Draw skeleton connections
-                        mp_pose = mp.solutions.pose
-                        connections = mp_pose.POSE_CONNECTIONS
-                        for connection in connections:
-                            start_idx, end_idx = connection
-                            start_lm = landmarks[start_idx]
-                            end_lm = landmarks[end_idx]
-
-                            if start_lm.visibility > 0.5 and end_lm.visibility > 0.5:
-                                start_point = (int(start_lm.x * w), int(start_lm.y * h))
-                                end_point = (int(end_lm.x * w), int(end_lm.y * h))
-                                cv2.line(
+                            if x_coords and y_coords:
+                                x1, y1 = int(min(x_coords)), int(min(y_coords))
+                                x2, y2 = int(max(x_coords)), int(max(y_coords))
+                                cv2.rectangle(
                                     annotated,
-                                    start_point,
-                                    end_point,
+                                    (x1, y1),
+                                    (x2, y2),
                                     colors["MediaPipe"],
                                     2,
                                 )
+
+                            # Draw keypoints
+                            for lm in landmarks:
+                                x, y = int(lm.x * w), int(lm.y * h)
+                                if 0 < x < w and 0 < y < h and lm.visibility > 0.5:
+                                    cv2.circle(
+                                        annotated, (x, y), 3, colors["MediaPipe"], -1
+                                    )
+
+                            # Draw skeleton connections
+                            mp_pose = mp.solutions.pose
+                            connections = mp_pose.POSE_CONNECTIONS
+                            for connection in connections:
+                                start_idx, end_idx = connection
+                                start_lm = landmarks[start_idx]
+                                end_lm = landmarks[end_idx]
+
+                                if (
+                                    start_lm.visibility > 0.5
+                                    and end_lm.visibility > 0.5
+                                ):
+                                    start_point = (
+                                        int(start_lm.x * w),
+                                        int(start_lm.y * h),
+                                    )
+                                    end_point = (int(end_lm.x * w), int(end_lm.y * h))
+                                    cv2.line(
+                                        annotated,
+                                        start_point,
+                                        end_point,
+                                        colors["MediaPipe"],
+                                        2,
+                                    )
+                    else:
+                        # New Tasks API (MediaPipe >= 0.10)
+                        if results and results.pose_landmarks:
+                            h, w = annotated.shape[:2]
+
+                            # Draw each detected pose
+                            for pose_landmarks in results.pose_landmarks:
+                                # Calculate bounding box from landmarks
+                                x_coords = [lm.x * w for lm in pose_landmarks]
+                                y_coords = [lm.y * h for lm in pose_landmarks]
+
+                                if x_coords and y_coords:
+                                    x1, y1 = int(min(x_coords)), int(min(y_coords))
+                                    x2, y2 = int(max(x_coords)), int(max(y_coords))
+                                    cv2.rectangle(
+                                        annotated,
+                                        (x1, y1),
+                                        (x2, y2),
+                                        colors["MediaPipe"],
+                                        2,
+                                    )
+
+                                # Draw keypoints
+                                for lm in pose_landmarks:
+                                    x, y = int(lm.x * w), int(lm.y * h)
+                                    if 0 < x < w and 0 < y < h and lm.visibility > 0.5:
+                                        cv2.circle(
+                                            annotated,
+                                            (x, y),
+                                            3,
+                                            colors["MediaPipe"],
+                                            -1,
+                                        )
+
+                                # Draw skeleton connections
+                                from mediapipe.tasks.python.vision import (
+                                    PoseLandmarksConnections,
+                                )
+
+                                connections = PoseLandmarksConnections.POSE_LANDMARKS
+                                for connection in connections:
+                                    start_idx, end_idx = connection
+                                    start_lm = pose_landmarks[start_idx]
+                                    end_lm = pose_landmarks[end_idx]
+
+                                    if (
+                                        start_lm.visibility > 0.5
+                                        and end_lm.visibility > 0.5
+                                    ):
+                                        start_point = (
+                                            int(start_lm.x * w),
+                                            int(start_lm.y * h),
+                                        )
+                                        end_point = (
+                                            int(end_lm.x * w),
+                                            int(end_lm.y * h),
+                                        )
+                                        cv2.line(
+                                            annotated,
+                                            start_point,
+                                            end_point,
+                                            colors["MediaPipe"],
+                                            2,
+                                        )
 
             except Exception as e:
                 print(f"   ⚠️  Error annotating frame for {framework.name}: {e}")

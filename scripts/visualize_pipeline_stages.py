@@ -150,19 +150,34 @@ def create_stage2_sam(
     if masks_by_id is None or len(masks_by_id) == 0:
         return img_sam
 
+    # Highly distinguishable color palette (BGR)
+    distinguishable_colors = [
+        (255, 0, 0),  # Bright Blue
+        (0, 255, 0),  # Bright Green
+        (0, 0, 255),  # Bright Red
+        (255, 255, 0),  # Cyan
+        (255, 0, 255),  # Magenta
+        (0, 255, 255),  # Yellow
+        (128, 0, 255),  # Purple
+        (0, 128, 255),  # Orange
+        (255, 128, 0),  # Sky Blue
+        (0, 255, 128),  # Spring Green
+        (128, 255, 0),  # Chartreuse
+        (255, 0, 128),  # Rose
+    ]
+
     # Create colored overlay
     overlay = img_sam.copy()
-    np.random.seed(42)  # For consistent colors
 
-    for obj_id, mask in masks_by_id.items():
+    for idx, (obj_id, mask) in enumerate(masks_by_id.items()):
         if mask is None:
             continue
         if mask.dtype != np.uint8:
             mask = (mask > 0).astype(np.uint8)
         if mask.sum() == 0:
             continue
-        # Random color for each mask
-        color = np.random.randint(50, 255, 3).tolist()
+        # Use distinguishable color from palette
+        color = distinguishable_colors[idx % len(distinguishable_colors)]
         overlay[mask > 0] = color
 
     # Blend with original
@@ -252,9 +267,11 @@ def create_pipeline_visualization(
     imgsz: int = 640,
     conf: float = 0.3,
     central_ratio: float = 0.6,
-    output_path: str = "pipeline_visualization.png",
+    output_dir: str = "outputs/pipeline_viz",
+    frame_step: int = 1,
+    max_frames: int = 0,
 ):
-    """Create the full 3-panel visualization."""
+    """Create the full 3-panel visualization for multiple frames."""
 
     # Load video
     cap = cv2.VideoCapture(video_path)
@@ -262,17 +279,35 @@ def create_pipeline_visualization(
         print(f"Error: Could not open video {video_path}")
         return 1
 
-    # Seek to frame
-    cap.set(cv2.CAP_PROP_POS_FRAMES, frame_number)
-    ret, frame = cap.read()
-    cap.release()
+    # Get total frame count
+    total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+    print(f"Video has {total_frames} frames")
 
+    # Determine which frames to process
+    if max_frames > 0:
+        end_frame = min(frame_number + max_frames * frame_step, total_frames)
+    else:
+        end_frame = total_frames
+
+    frames_to_process = list(range(frame_number, end_frame, frame_step))
+    print(f"Will process {len(frames_to_process)} frames (every {frame_step} frame(s))")
+
+    # Create output directory
+    output_path = Path(output_dir)
+    output_path.mkdir(parents=True, exist_ok=True)
+    print(f"Output directory: {output_path}")
+
+    # Read first frame to get dimensions
+    cap.set(cv2.CAP_PROP_POS_FRAMES, frame_number)
+    ret, first_frame = cap.read()
     if not ret:
         print(f"Error: Could not read frame {frame_number}")
+        cap.release()
         return 1
 
-    print(f"Processing frame {frame_number} from {video_path}")
-    print(f"Frame shape: {frame.shape}")
+    print(f"Frame shape: {first_frame.shape}")
+
+    print(f"Frame shape: {first_frame.shape}")
 
     # Load models
     device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -305,62 +340,92 @@ def create_pipeline_visualization(
     except Exception as e:
         print(f"Warning: Team clustering init failed: {e}")
 
-    # Create each stage
-    print("\nStage 1: YOLO Pose Detection...")
-    img_yolo, boxes, keypoints_all = create_stage1_yolo(frame, yolo_model, imgsz, conf)
-    print(f"  Detected {len(boxes)} boxes")
+    # Process each frame
+    print(f"\nProcessing frames...")
+    from tqdm import tqdm
 
-    print("Stage 2: SAM2 Segmentation...")
-    img_sam = create_stage2_sam(frame, boxes, sam2_wrapper, frame_idx=0)
+    for frame_idx in tqdm(frames_to_process, desc="Processing frames"):
+        # Read frame
+        cap.set(cv2.CAP_PROP_POS_FRAMES, frame_idx)
+        ret, frame = cap.read()
+        if not ret:
+            print(f"Warning: Could not read frame {frame_idx}, skipping...")
+            continue
 
-    print("Stage 3: Team Clustering...")
-    img_teams = create_stage3_teams(
-        frame,
-        boxes,
-        keypoints_all,
-        sam2_wrapper,
-        team_infer,
-        central_ratio,
-        frame_idx=0,
-    )
+        # IMPORTANT: Reset SAM2 state for each new frame to prevent state accumulation
+        if sam2_wrapper is not None:
+            try:
+                # Try to reset the state if method exists
+                if hasattr(sam2_wrapper, "reset_state"):
+                    sam2_wrapper.reset_state()
+                else:
+                    # Recreate the wrapper to ensure clean state
+                    dtype = torch.float16 if device == "cuda" else torch.float32
+                    sam2_wrapper = SAM2VideoWrapper(
+                        model_id=sam2_model_id, device=device, dtype=dtype
+                    )
+            except Exception as e:
+                print(f"Warning: Could not reset SAM2 state: {e}")
+                # Try recreating as fallback
+                try:
+                    dtype = torch.float16 if device == "cuda" else torch.float32
+                    sam2_wrapper = SAM2VideoWrapper(
+                        model_id=sam2_model_id, device=device, dtype=dtype
+                    )
+                except Exception as e2:
+                    print(f"Error: Could not recreate SAM2 wrapper: {e2}")
 
-    # Create 3-panel figure with custom layout
-    print(f"\nCreating visualization...")
-    fig = plt.figure(figsize=(20, 12))
+        # Create each stage
+        img_yolo, boxes, keypoints_all = create_stage1_yolo(
+            frame, yolo_model, imgsz, conf
+        )
+        img_sam = create_stage2_sam(frame, boxes, sam2_wrapper, frame_idx=0)
+        img_teams = create_stage3_teams(
+            frame,
+            boxes,
+            keypoints_all,
+            sam2_wrapper,
+            team_infer,
+            central_ratio,
+            frame_idx=0,
+        )
 
-    # Create custom grid using GridSpec: 2 rows, 2 columns
-    # Top row: YOLO (left) and SAM2 (right)
-    # Bottom row: Team Clustering spanning both columns
-    from matplotlib.gridspec import GridSpec
+        # Create 3-panel figure with custom layout
+        fig = plt.figure(figsize=(20, 12))
 
-    gs = GridSpec(2, 2, figure=fig, hspace=0.15, wspace=0.15)
+        # Create custom grid using GridSpec: 2 rows, 2 columns
+        # Top row: YOLO (left) and SAM2 (right)
+        # Bottom row: Team Clustering spanning both columns
+        from matplotlib.gridspec import GridSpec
 
-    ax1 = fig.add_subplot(gs[0, 0])  # Top-left
-    ax2 = fig.add_subplot(gs[0, 1])  # Top-right
-    ax3 = fig.add_subplot(gs[1, :])  # Bottom row, spanning both columns
+        gs = GridSpec(2, 2, figure=fig, hspace=0.15, wspace=0.15)
 
-    ax1.imshow(cv2.cvtColor(img_yolo, cv2.COLOR_BGR2RGB))
-    ax1.set_title("1. YOLO Pose Detection", fontsize=16, fontweight="bold")
-    ax1.axis("off")
+        ax1 = fig.add_subplot(gs[0, 0])  # Top-left
+        ax2 = fig.add_subplot(gs[0, 1])  # Top-right
+        ax3 = fig.add_subplot(gs[1, :])  # Bottom row, spanning both columns
 
-    ax2.imshow(cv2.cvtColor(img_sam, cv2.COLOR_BGR2RGB))
-    ax2.set_title("2. SAM2 Segmentation", fontsize=16, fontweight="bold")
-    ax2.axis("off")
+        ax1.imshow(cv2.cvtColor(img_yolo, cv2.COLOR_BGR2RGB))
+        ax1.set_title("1. YOLO Pose Detection", fontsize=16, fontweight="bold")
+        ax1.axis("off")
 
-    ax3.imshow(cv2.cvtColor(img_teams, cv2.COLOR_BGR2RGB))
-    ax3.set_title("3. Team Clustering", fontsize=16, fontweight="bold")
-    ax3.axis("off")
+        ax2.imshow(cv2.cvtColor(img_sam, cv2.COLOR_BGR2RGB))
+        ax2.set_title("2. SAM2 Segmentation", fontsize=16, fontweight="bold")
+        ax2.axis("off")
 
-    # Adjust spacing to make it tighter
-    plt.subplots_adjust(left=0.05, right=0.95, top=0.95, bottom=0.05)
-    plt.savefig(output_path, dpi=150, bbox_inches="tight")
-    print(f"✓ Saved visualization to: {output_path}")
+        ax3.imshow(cv2.cvtColor(img_teams, cv2.COLOR_BGR2RGB))
+        ax3.set_title("3. Team Clustering", fontsize=16, fontweight="bold")
+        ax3.axis("off")
 
-    # Also show if possible
-    try:
-        plt.show()
-    except:
-        pass
+        # Adjust spacing to make it tighter
+        plt.subplots_adjust(left=0.05, right=0.95, top=0.95, bottom=0.05)
+
+        # Save with frame number in filename
+        frame_output = output_path / f"frame_{frame_idx:06d}.png"
+        plt.savefig(frame_output, dpi=150, bbox_inches="tight")
+        plt.close(fig)  # Close the figure to free memory
+
+    cap.release()
+    print(f"✓ Saved {len(frames_to_process)} visualizations to: {output_path}")
 
     return 0
 
@@ -368,9 +433,7 @@ def create_pipeline_visualization(
 def main():
     cfg = settings()
 
-    parser = argparse.ArgumentParser(
-        description="Visualize pipeline stages for one frame"
-    )
+    parser = argparse.ArgumentParser(description="Visualize pipeline stages for frames")
     parser.add_argument(
         "--video",
         type=str,
@@ -378,7 +441,19 @@ def main():
         help="Path to video file",
     )
     parser.add_argument(
-        "--frame", type=int, default=100, help="Frame number to visualize"
+        "--frame", type=int, default=100, help="Starting frame number to visualize"
+    )
+    parser.add_argument(
+        "--frame-step",
+        type=int,
+        default=30,
+        help="Process every nth frame (default: 30)",
+    )
+    parser.add_argument(
+        "--max-frames",
+        type=int,
+        default=10,
+        help="Maximum number of frames to process (0=all from start frame, default: 10)",
     )
     parser.add_argument(
         "--yolo-model",
@@ -412,16 +487,13 @@ def main():
         help="Central crop ratio for team inference",
     )
     parser.add_argument(
-        "--output",
+        "--output-dir",
         type=str,
-        default="outputs/pipeline_visualization.png",
-        help="Output path for visualization",
+        default="outputs/pipeline_viz",
+        help="Output directory for visualizations",
     )
 
     args = parser.parse_args()
-
-    # Ensure output directory exists
-    Path(args.output).parent.mkdir(parents=True, exist_ok=True)
 
     return create_pipeline_visualization(
         video_path=args.video,
@@ -433,7 +505,9 @@ def main():
         imgsz=args.imgsz,
         conf=args.conf,
         central_ratio=args.central_ratio,
-        output_path=args.output,
+        output_dir=args.output_dir,
+        frame_step=args.frame_step,
+        max_frames=args.max_frames,
     )
 
 
