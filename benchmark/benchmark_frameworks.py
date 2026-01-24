@@ -827,7 +827,8 @@ def export_sample_frames(
 
                                 connections = PoseLandmarksConnections.POSE_LANDMARKS
                                 for connection in connections:
-                                    start_idx, end_idx = connection
+                                    start_idx = connection.start
+                                    end_idx = connection.end
                                     start_lm = pose_landmarks[start_idx]
                                     end_lm = pose_landmarks[end_idx]
 
@@ -1388,7 +1389,14 @@ def main():
     if args.export_frames:
         # Reload models for frameworks that need it
         for fw in frameworks:
-            if fw.available and not hasattr(fw, "model") and not hasattr(fw, "yolo"):
+            # Always reload MediaPipe to reset timestamp counter
+            if isinstance(fw, MediaPipeBenchmark) and fw.available:
+                print(f"  🔄 Reloading {fw.name} for frame export...")
+                if hasattr(fw, "model") and not fw.use_legacy:
+                    fw.model.close()
+                fw.frame_timestamp_ms = 0  # Reset timestamp
+                fw.load_model()
+            elif fw.available and not hasattr(fw, "model") and not hasattr(fw, "yolo"):
                 fw.load_model()
 
         export_sample_frames(
